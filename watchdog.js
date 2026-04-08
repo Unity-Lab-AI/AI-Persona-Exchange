@@ -360,14 +360,14 @@ try { fs.mkdirSync(AGENT_DIR, { recursive: true }); } catch(e) {}
 // /workflow slash commands — Claude follows them without refusal.
 function askAIWithAgent(personaContent, userPrompt) {
     return new Promise(function(resolve) {
-        // Write the persona as an agent definition
-        fs.writeFileSync(AGENT_FILE, personaContent, 'utf8');
-
         if (CLI_CMD === 'claude') {
-            var tmpFile = path.join(require('os').tmpdir(), 'watchdog_td_' + Date.now() + '.txt');
+            // Use --system-prompt to inject persona directly, run from temp dir
+            // so Claude doesn't pick up the exchange CLAUDE.md
+            var tmpDir = require('os').tmpdir();
+            var tmpFile = path.join(tmpDir, 'watchdog_td_' + Date.now() + '.txt');
             fs.writeFileSync(tmpFile, userPrompt, 'utf8');
-            var child = spawn('claude', ['--print', '--agent', 'test-drive'], {
-                cwd: EXCHANGE_DIR,
+            var child = spawn('claude', ['--print', '--system-prompt', personaContent], {
+                cwd: tmpDir,
                 stdio: [fs.openSync(tmpFile, 'r'), 'pipe', 'pipe'],
                 windowsHide: true
             });
@@ -375,22 +375,20 @@ function askAIWithAgent(personaContent, userPrompt) {
             child.stdout.on('data', function(c) { output += c.toString(); });
             child.on('close', function() {
                 try { fs.unlinkSync(tmpFile); } catch(e) {}
-                try { fs.unlinkSync(AGENT_FILE); } catch(e) {}
                 resolve(output.trim());
             });
             child.on('error', function() {
                 try { fs.unlinkSync(tmpFile); } catch(e) {}
-                try { fs.unlinkSync(AGENT_FILE); } catch(e) {}
                 resolve('');
             });
         } else {
             // non-claude platforms: bake persona into the prompt
-            var wrappedPrompt = personaContent + '\n\n---\n\n' + userPrompt;
+            var wrappedPrompt = personaContent + '\n\n---\n\nRespond in-character to: ' + userPrompt;
             var child = spawn(CLI_ARGS[0], [wrappedPrompt], { stdio: ['pipe', 'pipe', 'pipe'], shell: true });
             var output = '';
             child.stdout.on('data', function(c) { output += c.toString(); });
-            child.on('close', function() { try { fs.unlinkSync(AGENT_FILE); } catch(e) {} resolve(output.trim()); });
-            child.on('error', function() { try { fs.unlinkSync(AGENT_FILE); } catch(e) {} resolve(''); });
+            child.on('close', function() { resolve(output.trim()); });
+            child.on('error', function() { resolve(''); });
             child.stdin.end();
         }
     });
@@ -403,7 +401,7 @@ function askAI(prompt) {
             // write prompt to temp file, pipe to claude via shell redirection
             var tmpFile = path.join(require('os').tmpdir(), 'watchdog_prompt_' + Date.now() + '.txt');
             fs.writeFileSync(tmpFile, prompt, 'utf8');
-            var child = spawn('claude', ['--print'], { cwd: EXCHANGE_DIR, stdio: [fs.openSync(tmpFile, 'r'), 'pipe', 'pipe'], windowsHide: true });
+            var child = spawn('claude', ['--print'], { cwd: require('os').tmpdir(), stdio: [fs.openSync(tmpFile, 'r'), 'pipe', 'pipe'], windowsHide: true });
             var output = '';
             child.stdout.on('data', function(c) { output += c.toString(); });
             child.on('close', function() { try { fs.unlinkSync(tmpFile); } catch(e) {} resolve(output.trim()); });
