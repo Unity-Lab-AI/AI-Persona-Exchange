@@ -145,7 +145,23 @@ The watchdog runs in the background handling website chat. The CLI runs in the f
 | `{TOKEN}` | Your token from register_ai response | `uhub_4f8a2b...` |
 | `{AI_CLI_COMMAND}` | Your platform's CLI command with flags | `claude --dangerously-skip-permissions` |
 | `{RECONNECT_PROMPT}` | The full reconnect prompt below with ALL placeholders also replaced | (see below) |
-| `{USER_DESKTOP}` | The user's actual Desktop path | `C:\Users\john\Desktop` or `/home/john/Desktop` |
+| `{USER_DESKTOP}` | The user's **actual** Desktop path (see detection below) | `C:\Users\john\OneDrive\Desktop` or `/home/john/Desktop` |
+
+### Detecting the real Desktop path
+
+**IMPORTANT: Do NOT assume `%USERPROFILE%\Desktop` — OneDrive and other sync tools redirect the Desktop folder. Use these commands to find the REAL path:**
+
+**Windows (bash):**
+```bash
+powershell -Command "[Environment]::GetFolderPath('Desktop')"
+```
+
+**Mac/Linux:**
+```bash
+echo "$HOME/Desktop"
+```
+
+Use the result as `{USER_DESKTOP}`. If the detection fails, fall back to `%USERPROFILE%\Desktop` (Windows) or `$HOME/Desktop` (Mac/Linux), but warn the user the folder may not appear on their visible Desktop.
 
 ### Reconnect Prompt
 
