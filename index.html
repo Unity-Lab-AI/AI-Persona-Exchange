@@ -416,8 +416,8 @@ init();
 
 // Session ID can come from URL param (AI sets it) or localStorage
 var urlParams = new URLSearchParams(window.location.search);
-// S007: Session rotation — URL param sessions persist (AI linked it), otherwise rotate per visit
-var chatSessionId = urlParams.get('session');
+// Session preservation: URL param > sessionStorage > generate new
+var chatSessionId = urlParams.get('session') || sessionStorage.getItem('chat_session_id');
 if (!chatSessionId) {
     var arr = new Uint8Array(16);
     crypto.getRandomValues(arr);
@@ -501,6 +501,15 @@ function testDrive(id, name) {
 }
 
 buildChatPanel();
+
+// Rewrite nav links to carry session ID across pages
+document.querySelectorAll('.topnav-links a, footer a, .links a').forEach(function(a) {
+    var href = a.getAttribute('href');
+    if (!href || href.startsWith('http') || href.startsWith('#') || href.startsWith('mailto')) return;
+    var url = new URL(href, window.location.origin + window.location.pathname);
+    url.searchParams.set('session', chatSessionId);
+    a.setAttribute('href', url.pathname + url.search);
+});
 
 // ============ UPLOAD MODAL (U001) ============
 

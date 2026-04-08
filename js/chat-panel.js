@@ -6,16 +6,25 @@
 (function() {
     // Get or create session ID
     var urlParams = new URLSearchParams(window.location.search);
-    // S007: Session rotation — URL param sessions persist (AI linked it), otherwise rotate per visit
-    var chatSessionId = urlParams.get('session');
+    // Session preservation: URL param > sessionStorage > generate new
+    var chatSessionId = urlParams.get('session') || sessionStorage.getItem('chat_session_id');
     if (!chatSessionId) {
-        // Generate a fresh crypto-secure session each visit — no localStorage persistence
         var arr = new Uint8Array(16);
         crypto.getRandomValues(arr);
         chatSessionId = 'sess_' + Array.from(arr, function(b) { return b.toString(16).padStart(2, '0'); }).join('');
     }
-    // Only store temporarily for this page load (other scripts on the page may need it)
     sessionStorage.setItem('chat_session_id', chatSessionId);
+
+    // Rewrite all internal nav links to carry the session ID
+    // So navigating between pages preserves the AI connection
+    document.querySelectorAll('.topnav-links a, footer a, .links a').forEach(function(a) {
+        var href = a.getAttribute('href');
+        if (!href || href.startsWith('http') || href.startsWith('#') || href.startsWith('mailto')) return;
+        // Strip any existing session param and add current one
+        var url = new URL(href, window.location.origin + window.location.pathname);
+        url.searchParams.set('session', chatSessionId);
+        a.setAttribute('href', url.pathname + url.search);
+    });
 
     // Use the sb client from supabase-client.js if available, otherwise create one
     var client = window.sb || (window.supabase ? window.supabase.createClient('https://szojggcbtctucvswhzsm.supabase.co', 'sb_publishable_htATCFp-Wr3_8tyx85SQFA_IY9jzfh2') : null);
