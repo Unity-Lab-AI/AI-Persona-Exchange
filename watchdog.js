@@ -392,18 +392,54 @@ async function handleInstall(personaId) {
     // The persona file is saved to .claude/agents/{id}.md — the user's own AI workflow
     // (e.g. start.bat with --dangerously-skip-permissions) will pick it up on next launch.
 
-    var installPath = '.claude/agents/' + personaId + '.md';
     var contentSize = Math.round(content.length / 1024) + 'KB';
+
+    // Platform-specific install instructions
+    var instructions = '';
+    if (CLI_CMD === 'claude') {
+        instructions =
+            'Persona saved to: `.claude/agents/' + personaId + '.md`\n\n' +
+            '**To activate:** Run `claude --dangerously-skip-permissions --agent ' + personaId + '` from this directory.\n' +
+            'Or: the persona loads as project context when Claude Code starts in this directory.';
+    } else if (CLI_CMD === 'codex') {
+        // Codex uses system prompt via --system-prompt flag or AGENTS.md
+        var codexFile = path.join(EXCHANGE_DIR, 'AGENTS.md');
+        fs.writeFileSync(codexFile, content, 'utf8');
+        instructions =
+            'Persona saved to: `AGENTS.md` (Codex reads this as agent instructions)\n' +
+            'Also saved to: `.claude/agents/' + personaId + '.md`\n\n' +
+            '**To activate:** Run `codex` from this directory — it reads AGENTS.md automatically.';
+    } else if (CLI_CMD === 'aider') {
+        // Aider uses .aider.conf.yml or --read flag
+        var aiderFile = path.join(EXCHANGE_DIR, '.aider.persona.md');
+        fs.writeFileSync(aiderFile, content, 'utf8');
+        instructions =
+            'Persona saved to: `.aider.persona.md`\n' +
+            'Also saved to: `.claude/agents/' + personaId + '.md`\n\n' +
+            '**To activate:** Run `aider --read .aider.persona.md` from this directory.';
+    } else if (CLI_CMD === 'interpreter') {
+        // Open Interpreter uses system message via -s flag or profile
+        var oiFile = path.join(EXCHANGE_DIR, 'persona_system_prompt.md');
+        fs.writeFileSync(oiFile, content, 'utf8');
+        instructions =
+            'Persona saved to: `persona_system_prompt.md`\n' +
+            'Also saved to: `.claude/agents/' + personaId + '.md`\n\n' +
+            '**To activate:** Run `interpreter --system-message "$(cat persona_system_prompt.md)"`\n' +
+            'Or paste the content into your Open Interpreter profile.';
+    } else {
+        instructions =
+            'Persona saved to: `.claude/agents/' + personaId + '.md`\n\n' +
+            '**To activate:** Load the file content as your AI\'s system prompt or agent definition.\n' +
+            '- **ChatGPT:** Paste into Custom Instructions → "How would you like ChatGPT to respond?"\n' +
+            '- **Gemini:** Set as system instruction in the API or Advanced Settings\n' +
+            '- **Copilot:** Save as `.github/copilot-instructions.md` in your project\n' +
+            '- **API usage:** Pass as the `system` message in your API call';
+    }
 
     sendChat(
         '**Installed: ' + personaName + '** (' + contentSize + ')\n\n' +
-        'Persona saved to: `' + installPath + '`\n\n' +
-        '**How to use it:**\n' +
-        '- **Claude Code:** The persona loads automatically next time you start Claude Code in this directory. If the persona is NSFW, use `claude --dangerously-skip-permissions` to bypass content restrictions.\n' +
-        '- **ChatGPT:** Copy the persona content from the file and paste it into your Custom Instructions or system message.\n' +
-        '- **Other AIs:** Load the file content as your system prompt or agent definition.\n\n' +
-        'Type **"uninstall"** to remove the persona file.\n' +
-        'Type **"test drive ' + personaId + '"** to preview the full content first.'
+        instructions + '\n\n' +
+        'Type **"uninstall"** to remove the persona file.'
     );
 }
 
@@ -469,9 +505,32 @@ function askAIWithPersona(personaContent, prompt) {
             child.stdout.on('data', function(c) { output += c.toString(); });
             child.on('close', function() { cleanup(); resolve(output.trim()); });
             child.on('error', function() { cleanup(); resolve(''); });
+        } else if (CLI_CMD === 'codex') {
+            // Codex: write AGENTS.md in temp dir, run codex from there
+            fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), personaContent, 'utf8');
+            var child = spawn('codex', ['--quiet', '--full-auto', prompt], {
+                cwd: tmpDir, stdio: ['pipe', 'pipe', 'pipe'], shell: true
+            });
+            var output = '';
+            child.stdout.on('data', function(c) { output += c.toString(); });
+            child.on('close', function() { cleanup(); try { fs.unlinkSync(path.join(tmpDir, 'AGENTS.md')); } catch(e) {} resolve(output.trim()); });
+            child.on('error', function() { cleanup(); resolve(''); });
+            child.stdin.end();
+        } else if (CLI_CMD === 'aider') {
+            // Aider: write persona to temp file, use --read flag
+            var personaFile = path.join(tmpDir, 'persona.md');
+            fs.writeFileSync(personaFile, personaContent, 'utf8');
+            var child = spawn('aider', ['--message', prompt, '--read', personaFile, '--yes', '--no-auto-commits', '--no-git'], {
+                cwd: tmpDir, stdio: ['pipe', 'pipe', 'pipe'], shell: true
+            });
+            var output = '';
+            child.stdout.on('data', function(c) { output += c.toString(); });
+            child.on('close', function() { cleanup(); try { fs.unlinkSync(personaFile); } catch(e) {} resolve(output.trim()); });
+            child.on('error', function() { cleanup(); resolve(''); });
+            child.stdin.end();
         } else {
-            // non-claude: bake persona into prompt via stdin
-            var full = personaContent + '\n\n---\n\nRespond in-character: ' + prompt;
+            // Interpreter and others: pipe persona + prompt through stdin
+            var full = personaContent + '\n\n---\n\nRespond in-character to: ' + prompt;
             var child = spawn(CLI_ARGS[0], [], { stdio: ['pipe', 'pipe', 'pipe'], shell: true });
             var output = '';
             child.stdout.on('data', function(c) { output += c.toString(); });
