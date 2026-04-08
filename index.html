@@ -105,6 +105,7 @@
 
 <main class="container">
     <div class="section-header" id="personas"><h2>Personas</h2><span class="count" id="persona-count"></span></div>
+    <div style="margin-bottom:16px;"><input type="text" id="search-input" placeholder="Search personas by name, description, or content..." title="Search across all persona content" style="width:100%;padding:12px 18px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:inherit;font-size:0.9rem;outline:none;transition:border-color 0.15s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" oninput="handleSearch(this.value)"></div>
     <div class="filters" id="filters"></div>
     <div class="grid" id="grid"><div class="empty">Loading...</div></div>
 </main>
@@ -238,15 +239,20 @@ Push Test Result:
 <script>
 var sb = window.supabase.createClient('https://szojggcbtctucvswhzsm.supabase.co', 'sb_publishable_htATCFp-Wr3_8tyx85SQFA_IY9jzfh2');
 var allPersonas = [];
+var personaContent = {};
 var activeFilter = 'all';
+var searchQuery = '';
 
 async function init() {
     try {
         var pRes = await sb.from('personas_with_ratings').select('*');
-        var fRes = await sb.from('persona_files').select('persona_id, format, filename');
+        var fRes = await sb.from('persona_files').select('persona_id, format, filename, content');
         var personas = (pRes.data || []).map(function(p) {
             var formats = {};
-            (fRes.data || []).filter(function(f) { return f.persona_id === p.id; }).forEach(function(f) { formats[f.format] = f.filename; });
+            (fRes.data || []).filter(function(f) { return f.persona_id === p.id; }).forEach(function(f) {
+                formats[f.format] = f.filename;
+                if (f.content) personaContent[p.id] = (personaContent[p.id] || '') + ' ' + f.content;
+            });
             p.formats = formats;
             return p;
         });
@@ -282,9 +288,32 @@ function filterBy(f, btn) {
     activeFilter = f;
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    if (f === 'all') return renderCards(allPersonas);
-    if (f === 'community') return renderCards(allPersonas.filter(p => p.uploaded_by_id));
-    renderCards(allPersonas.filter(p => (p.tags || []).some(t => t.includes(f))));
+    applyFilters();
+}
+
+function handleSearch(q) {
+    searchQuery = q.toLowerCase().trim();
+    applyFilters();
+}
+
+function applyFilters() {
+    var filtered = allPersonas;
+    // Apply tag filter
+    if (activeFilter === 'community') {
+        filtered = filtered.filter(function(p) { return p.uploaded_by_id; });
+    } else if (activeFilter !== 'all') {
+        filtered = filtered.filter(function(p) { return (p.tags || []).some(function(t) { return t.includes(activeFilter); }); });
+    }
+    // Apply search — matches name, description, tags, or full persona content
+    if (searchQuery) {
+        filtered = filtered.filter(function(p) {
+            var haystack = (p.name + ' ' + p.description + ' ' + (p.tags || []).join(' ')).toLowerCase();
+            if (haystack.indexOf(searchQuery) !== -1) return true;
+            var content = personaContent[p.id] || '';
+            return content.toLowerCase().indexOf(searchQuery) !== -1;
+        });
+    }
+    renderCards(filtered);
 }
 
 function renderCards(personas) {
