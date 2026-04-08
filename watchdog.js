@@ -105,12 +105,15 @@ function startClaude() {
         computedPrompt += '\n\n--- CURRENT ACTIVE PERSONA (' + activePersona.name + ') ---\n' + activePersona.content;
     }
 
+    var spPath = path.join(require('os').tmpdir(), 'wd_sysprompt_' + Date.now() + '.txt');
+    fs.writeFileSync(spPath, computedPrompt, 'utf8');
+
     var args = [
         '--print',
         '--verbose',
         '--input-format', 'stream-json',
         '--output-format', 'stream-json',
-        '--system-prompt', computedPrompt
+        '--system-prompt-file', spPath
     ].concat(EXTRA_ARGS);
 
     // Run from tmpdir so the AI can't read persona files, CLAUDE.md, or anything
@@ -518,11 +521,14 @@ function askAIWithPersona(personaContent, prompt) {
             console.log('[test-drive] tmpDir: ' + tmpDir);
             console.log('[test-drive] CLAUDE.md exists: ' + claudeMdExists + ' (' + claudeMdSize + ' bytes)');
             console.log('[test-drive] .git exists: ' + gitExists);
-            console.log('[test-drive] spawning: claude -p "' + prompt.slice(0, 50) + '" --agent test-drive --dangerously-skip-permissions');
+            console.log('[test-drive] spawning: claude -p "' + prompt.slice(0, 50) + '" --system-prompt-file sys_prompt.txt --dangerously-skip-permissions');
 
-            // -p "prompt" reads CLAUDE.md from project root (--print does NOT)
-            // Using --agent to ensure the Claude code loads the agent
-            var child = spawn('claude', ['-p', prompt, '--agent', 'test-drive', '--dangerously-skip-permissions'], {
+            // Write the persona configuration explicitly to a system prompt file
+            var spPath = path.join(tmpDir, 'sys_prompt.txt');
+            fs.writeFileSync(spPath, personaContent + '\n\nAdopt the rules above completely. Respond in-character to the prompt.', 'utf8');
+
+            // Trigger claude -p using --system-prompt-file to solidly lock identity
+            var child = spawn('claude', ['-p', prompt, '--system-prompt-file', spPath, '--dangerously-skip-permissions'], {
                 cwd: tmpDir,
                 stdio: ['pipe', 'pipe', 'pipe'],
                 windowsHide: true
