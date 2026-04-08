@@ -274,21 +274,28 @@ var personaProcess = null;      // separate claude process for persona mode
 var personaBuffer = '';
 var personaTextAccum = '';
 
+var personaWorkDir = null; // temp dir where persona CLAUDE.md lives
+
 function startPersonaProcess(personaContent, personaName, mode) {
     // Kill existing persona process if any
     stopPersonaProcess();
 
     if (CLI_CMD === 'claude') {
+        // Write persona as CLAUDE.md in a temp dir — Claude reads it as project instructions.
+        // This avoids command line length limits (Windows ~8191 chars, some personas are 60KB+).
+        personaWorkDir = path.join(require('os').tmpdir(), 'persona_' + Date.now());
+        try { fs.mkdirSync(personaWorkDir, { recursive: true }); } catch(e) {}
+        fs.writeFileSync(path.join(personaWorkDir, 'CLAUDE.md'), personaContent, 'utf8');
+
         var args = [
             '--print',
             '--verbose',
             '--input-format', 'stream-json',
-            '--output-format', 'stream-json',
-            '--system-prompt', personaContent
+            '--output-format', 'stream-json'
         ];
 
         personaProcess = spawn('claude', args, {
-            cwd: require('os').tmpdir(),
+            cwd: personaWorkDir,
             stdio: ['pipe', 'pipe', 'inherit'],
             shell: true
         });
@@ -338,6 +345,12 @@ function stopPersonaProcess() {
     if (personaProcess && !personaProcess.killed) {
         try { personaProcess.kill(); } catch(e) {}
         personaProcess = null;
+    }
+    // Clean up temp persona dir
+    if (personaWorkDir) {
+        try { fs.unlinkSync(path.join(personaWorkDir, 'CLAUDE.md')); } catch(e) {}
+        try { fs.rmdirSync(personaWorkDir); } catch(e) {}
+        personaWorkDir = null;
     }
 }
 
