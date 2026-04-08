@@ -529,7 +529,7 @@ async function handleUpload() {
         'PERSONA_NAME: (a short display name, 3-100 chars)',
         'PERSONA_ID: (lowercase-with-hyphens, 3-80 chars, unique)',
         'DESCRIPTION: (what this persona does, 10-200 chars)',
-        'TAGS: (comma-separated tags like: roleplay, coding, creative, nsfw)',
+        'TAGS: (comma-separated, MUST pick from this list ONLY: persona, mode, jailbreak, utility, framework, roleplay, coding, creative, productivity, conversation, education, nsfw, sfw, dark, wholesome, humor, professional, verbose, concise, poetic, casual, formal, chaotic — pick 2-5 that fit best)',
         'NSFW: (true or false)',
         'PLATFORMS: (comma-separated: universal, claude-code, chatgpt, api)',
         'CONTENT_START',
@@ -572,8 +572,25 @@ async function handleUpload() {
     var personaName = nameMatch[1].trim();
     var personaId = idMatch[1].trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
     var description = descMatch[1].trim();
-    var tags = tagsMatch ? tagsMatch[1].split(',').map(function(t) { return t.trim().toLowerCase(); }).filter(Boolean) : [];
+    var VALID_TAGS = ['persona','mode','jailbreak','utility','framework','roleplay','coding','creative','productivity','conversation','education','nsfw','sfw','dark','wholesome','humor','professional','verbose','concise','poetic','casual','formal','chaotic'];
+    var rawTags = tagsMatch ? tagsMatch[1].split(',').map(function(t) { return t.trim().toLowerCase(); }).filter(Boolean) : [];
+    var tags = rawTags.filter(function(t) { return VALID_TAGS.indexOf(t) !== -1; });
+    var invalidTags = rawTags.filter(function(t) { return VALID_TAGS.indexOf(t) === -1; });
+
+    if (invalidTags.length > 0) {
+        sendChat(
+            '**Some tags were removed because they\'re not in the unified taxonomy:** ' + invalidTags.join(', ') + '\n\n' +
+            'Valid tags: ' + VALID_TAGS.join(', ') + '\n\n' +
+            'Continuing with valid tags: ' + (tags.length > 0 ? tags.join(', ') : '(none — will default to "persona")')
+        );
+    }
+    if (tags.length === 0) tags = ['persona'];
+
     var nsfw = nsfwMatch ? nsfwMatch[1].toLowerCase() === 'true' : false;
+    // Auto-add nsfw/sfw tag if not present
+    if (nsfw && tags.indexOf('nsfw') === -1) tags.push('nsfw');
+    if (!nsfw && tags.indexOf('sfw') === -1 && tags.indexOf('nsfw') === -1) tags.push('sfw');
+
     var platforms = platformsMatch ? platformsMatch[1].split(',').map(function(p) { return p.trim().toLowerCase(); }).filter(Boolean) : ['universal'];
     var content = contentMatch[1].trim();
 
