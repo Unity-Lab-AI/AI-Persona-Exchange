@@ -108,7 +108,9 @@ function startClaude() {
         '--system-prompt', SYSTEM_PROMPT
     ].concat(EXTRA_ARGS);
 
-    claudeProcess = spawn('claude', args, { cwd: EXCHANGE_DIR, stdio: ['pipe', 'pipe', 'inherit'], shell: true });
+    // Run from tmpdir so the AI can't read persona files, CLAUDE.md, or anything
+    // in the exchange directory. It only knows what the system prompt tells it.
+    claudeProcess = spawn('claude', args, { cwd: require('os').tmpdir(), stdio: ['pipe', 'pipe', 'inherit'], shell: true });
 
     claudeProcess.stdout.on('data', function(chunk) {
         claudeBuffer += chunk.toString();
