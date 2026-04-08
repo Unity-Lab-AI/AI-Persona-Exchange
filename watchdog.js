@@ -264,22 +264,115 @@ function findPersonaId(text) {
     return null;
 }
 
+// =============================================
+//  ACTIVE PERSONA STATE
+//  Tracks whether the AI is running with a persona (test drive or installed)
+// =============================================
+
+var activePersona = null;       // { id, name, content, mode: 'test'|'installed' }
+var personaProcess = null;      // separate claude process for persona mode
+var personaBuffer = '';
+var personaTextAccum = '';
+
+function startPersonaProcess(personaContent, personaName, mode) {
+    // Kill existing persona process if any
+    stopPersonaProcess();
+
+    if (CLI_CMD === 'claude') {
+        var args = [
+            '--print',
+            '--verbose',
+            '--input-format', 'stream-json',
+            '--output-format', 'stream-json',
+            '--system-prompt', personaContent
+        ];
+
+        personaProcess = spawn('claude', args, {
+            cwd: require('os').tmpdir(),
+            stdio: ['pipe', 'pipe', 'inherit'],
+            shell: true
+        });
+
+        personaBuffer = '';
+        personaTextAccum = '';
+
+        personaProcess.stdout.on('data', function(chunk) {
+            personaBuffer += chunk.toString();
+            var lines = personaBuffer.split('\n');
+            personaBuffer = lines.pop();
+            for (var i = 0; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                try {
+                    var evt = JSON.parse(lines[i]);
+                    if (evt.type === 'stream_event' && evt.event) {
+                        var inner = evt.event;
+                        if (inner.type === 'message_start') personaTextAccum = '';
+                        else if (inner.type === 'content_block_delta' && inner.delta && inner.delta.type === 'text_delta') personaTextAccum += inner.delta.text;
+                        else if (inner.type === 'message_stop') {
+                            if (personaTextAccum.trim()) sendChat(personaTextAccum.trim());
+                            personaTextAccum = '';
+                        }
+                    } else if (evt.type === 'result' && typeof evt.result === 'string') {
+                        sendChat(evt.result);
+                    }
+                } catch(e) {}
+            }
+        });
+
+        personaProcess.on('close', function(code) {
+            console.log('[persona] process exited (' + code + ')');
+            personaProcess = null;
+        });
+
+        personaProcess.on('error', function(err) {
+            console.error('[persona] spawn failed: ' + err.message);
+            personaProcess = null;
+        });
+
+        console.log('[watchdog] Persona process started: ' + personaName + ' (' + mode + ')');
+    }
+    // For non-claude platforms, persona is handled per-message in dispatch
+}
+
+function stopPersonaProcess() {
+    if (personaProcess && !personaProcess.killed) {
+        try { personaProcess.kill(); } catch(e) {}
+        personaProcess = null;
+    }
+}
+
+function sendToPersona(message) {
+    if (!personaProcess || personaProcess.killed) return false;
+    var msg = JSON.stringify({ type: 'user', message: { role: 'user', content: message } }) + '\n';
+    try { personaProcess.stdin.write(msg); return true; } catch(e) { return false; }
+}
+
+function endPersonaMode(reason) {
+    var was = activePersona;
+    stopPersonaProcess();
+    activePersona = null;
+    if (was) {
+        sendChat('**' + (was.mode === 'test' ? 'Test drive' : 'Persona') + ' ended** — ' + was.name + '.\n' + (reason || 'Back to default mode.'));
+        console.log('[watchdog] Persona mode ended: ' + was.name);
+    }
+}
+
+// =============================================
+//  TEST DRIVE — live interactive persona session
+// =============================================
+
 async function handleTestDrive(personaId) {
     console.log('[watchdog] Test drive: ' + personaId);
-    sendChat('Starting test drive for **' + personaId + '**... Fetching persona and generating comparison.');
 
-    // fetch persona content from static site files
+    // Fetch persona content
     var personaContent = '';
     if (PERSONA_FILES[personaId]) {
         personaContent = await fetchSiteFile(PERSONA_FILES[personaId]);
     }
-
-    // fallback: try database
     if (!personaContent) {
         var files = await supaGet('persona_files?persona_id=eq.' + personaId + '&format=eq.md&select=content,persona_id');
         if (files && files.length > 0) personaContent = files[0].content || '';
     }
-
     if (!personaContent) {
         sendChat('Could not fetch persona content for ' + personaId + '.');
         return;
@@ -287,32 +380,34 @@ async function handleTestDrive(personaId) {
 
     var personaName = PERSONA_NAMES[personaId] || personaId;
 
-    var testPrompt = 'Introduce yourself in 2-3 sentences.';
+    // Set active persona state
+    activePersona = { id: personaId, name: personaName, content: personaContent, mode: 'test' };
 
-    // generate before response (default AI — no persona)
-    var beforePrompt = 'You are a standard AI assistant with no special persona or personality. A user asks you: "' + testPrompt + '"\n\nRespond naturally as a default AI would. 2-3 sentences only. Do not mention being asked to respond — just respond directly.';
-    var beforeResponse = await askAI(beforePrompt);
+    // Start a dedicated persona process
+    startPersonaProcess(personaContent, personaName, 'test');
 
-    // generate after response — writes persona to .claude/agents/test-drive.md
-    // and invokes claude --print --agent test-drive (same trust as /workflow)
-    var afterResponse = await askAIWithAgent(personaContent, testPrompt);
+    sendChat(
+        '**Test driving: ' + personaName + '**\n\n' +
+        'The AI is now running with this persona active. Chat normally — every response comes from the persona.\n\n' +
+        'Type **"end test"** when you\'re done to return to default mode.'
+    );
 
-    if (!beforeResponse) beforeResponse = 'Hello! I\'m an AI assistant here to help you with questions, analysis, coding, writing, and more. What would you like to work on today?';
-    if (!afterResponse) afterResponse = '(Persona response could not be generated)';
-
-    // push test result to supabase
-    var result = await supaRpc('push_test_result', {
-        p_persona_id: personaId,
-        p_persona_name: personaName,
-        p_prompt: testPrompt,
-        p_before: beforeResponse,
-        p_after: afterResponse,
-        p_index: 0,
-        p_total: 1
-    });
-
-    console.log('[watchdog] Test result pushed:', result);
-    sendChat('Test drive complete for **' + personaName + '**! Check the Test Lab page to see the before/after comparison.');
+    // Send an initial prompt so the persona introduces itself
+    setTimeout(function() {
+        if (activePersona && activePersona.mode === 'test') {
+            if (CLI_CMD === 'claude') {
+                sendToPersona('Introduce yourself in 2-3 sentences. You are now active and talking to a user through a chat panel.');
+            } else {
+                // One-shot for non-claude
+                var wrappedPrompt = personaContent + '\n\n---\n\nIntroduce yourself in 2-3 sentences.';
+                var child = spawn(CLI_ARGS[0], [wrappedPrompt], { stdio: ['pipe', 'pipe', 'pipe'], shell: true });
+                var output = '';
+                child.stdout.on('data', function(c) { output += c.toString(); });
+                child.on('close', function() { if (output.trim()) sendChat(output.trim()); });
+                child.stdin.end();
+            }
+        }
+    }, 2000);
 }
 
 async function handleBrowse() {
@@ -343,56 +438,60 @@ async function handleInstall(personaId) {
         sendChat('Could not find persona content for ' + personaId + '.');
         return;
     }
-    var name = PERSONA_NAMES[personaId] || personaId;
-    sendChat('Persona **' + name + '** content fetched. To install, save it as `.claude/agents/' + personaId + '.md` in your project. Content preview:\n\n```\n' + content.slice(0, 500) + '\n...\n```');
-}
 
-// .claude/agents/*.md files have the highest trust level in Claude Code —
-// they are treated as user-authored agent definitions, same as /workflow commands.
-var AGENT_DIR = path.join(EXCHANGE_DIR, '.claude', 'agents');
-var AGENT_FILE = path.join(AGENT_DIR, 'test-drive.md');
+    var personaName = PERSONA_NAMES[personaId] || personaId;
 
-// Ensure .claude/agents/ exists
-try { fs.mkdirSync(AGENT_DIR, { recursive: true }); } catch(e) {}
+    // End any active test drive first
+    if (activePersona && activePersona.mode === 'test') {
+        endPersonaMode('Switching to install.');
+    }
 
-// Write persona content to .claude/agents/test-drive.md, invoke claude with
-// --agent test-drive, then clean up. Agent files are the same trust level as
-// /workflow slash commands — Claude follows them without refusal.
-function askAIWithAgent(personaContent, userPrompt) {
-    return new Promise(function(resolve) {
-        if (CLI_CMD === 'claude') {
-            // Use --system-prompt to inject persona directly, run from temp dir
-            // so Claude doesn't pick up the exchange CLAUDE.md
-            var tmpDir = require('os').tmpdir();
-            var tmpFile = path.join(tmpDir, 'watchdog_td_' + Date.now() + '.txt');
-            fs.writeFileSync(tmpFile, userPrompt, 'utf8');
-            var child = spawn('claude', ['--print', '--system-prompt', personaContent], {
-                cwd: tmpDir,
-                stdio: [fs.openSync(tmpFile, 'r'), 'pipe', 'pipe'],
-                windowsHide: true
-            });
-            var output = '';
-            child.stdout.on('data', function(c) { output += c.toString(); });
-            child.on('close', function() {
-                try { fs.unlinkSync(tmpFile); } catch(e) {}
-                resolve(output.trim());
-            });
-            child.on('error', function() {
-                try { fs.unlinkSync(tmpFile); } catch(e) {}
-                resolve('');
-            });
-        } else {
-            // non-claude platforms: bake persona into the prompt
-            var wrappedPrompt = personaContent + '\n\n---\n\nRespond in-character to: ' + userPrompt;
-            var child = spawn(CLI_ARGS[0], [wrappedPrompt], { stdio: ['pipe', 'pipe', 'pipe'], shell: true });
-            var output = '';
-            child.stdout.on('data', function(c) { output += c.toString(); });
-            child.on('close', function() { resolve(output.trim()); });
-            child.on('error', function() { resolve(''); });
-            child.stdin.end();
+    // Write persona to the agent file
+    var installFile = path.join(AGENT_DIR, personaId + '.md');
+    try { fs.mkdirSync(AGENT_DIR, { recursive: true }); } catch(e) {}
+    fs.writeFileSync(installFile, content, 'utf8');
+    console.log('[watchdog] Persona written to ' + installFile);
+
+    // Set as active installed persona
+    activePersona = { id: personaId, name: personaName, content: content, mode: 'installed' };
+
+    // Kill the current default AI and restart with the persona
+    if (CLI_CMD === 'claude') {
+        // Kill the default claude process
+        if (claudeProcess && !claudeProcess.killed) {
+            try { claudeProcess.kill(); } catch(e) {}
+            claudeProcess = null;
         }
-    });
+
+        // Start a new persona process with the installed persona
+        startPersonaProcess(content, personaName, 'installed');
+
+        sendChat(
+            '**Installed: ' + personaName + '**\n\n' +
+            'The AI is now running with this persona. All responses will come from the persona going forward.\n\n' +
+            'Persona saved to: `.claude/agents/' + personaId + '.md`\n' +
+            'Type **"uninstall"** to remove the persona and return to default mode.'
+        );
+
+        // Have the persona introduce itself
+        setTimeout(function() {
+            if (activePersona && activePersona.mode === 'installed') {
+                sendToPersona('You have just been installed as the active persona. Introduce yourself to the user in 2-3 sentences.');
+            }
+        }, 2000);
+    } else {
+        // Non-claude: just save the file and update the system prompt for future one-shots
+        sendChat(
+            '**Installed: ' + personaName + '**\n\n' +
+            'Persona saved to `.claude/agents/' + personaId + '.md`. All future responses will use this persona.\n' +
+            'Type **"uninstall"** to remove.'
+        );
+    }
 }
+
+// .claude/agents/ directory for installed personas
+var AGENT_DIR = path.join(EXCHANGE_DIR, '.claude', 'agents');
+try { fs.mkdirSync(AGENT_DIR, { recursive: true }); } catch(e) {}
 
 // ask the AI a question and get the text response back
 function askAI(prompt) {
@@ -696,7 +795,61 @@ function dispatch(text) {
     console.log('[Website -> AI] ' + text);
     var lower = text.toLowerCase().trim();
 
-    // upload command (U002)
+    // === PERSONA CONTROL COMMANDS (always checked first) ===
+
+    // End test drive
+    if (lower === 'end test' || lower === 'end test drive' || lower === 'stop test') {
+        if (activePersona && activePersona.mode === 'test') {
+            endPersonaMode('Test drive complete. You\'re back to the default AI.');
+            // Restart default claude if it was killed
+            if (CLI_CMD === 'claude' && (!claudeProcess || claudeProcess.killed)) {
+                setTimeout(startClaude, 1000);
+            }
+        } else {
+            sendChat('No test drive is active.');
+        }
+        return;
+    }
+
+    // Uninstall persona
+    if (lower === 'uninstall' || lower === 'uninstall persona' || lower === 'remove persona') {
+        if (activePersona && activePersona.mode === 'installed') {
+            // Delete the agent file
+            var installFile = path.join(AGENT_DIR, activePersona.id + '.md');
+            try { fs.unlinkSync(installFile); } catch(e) {}
+            endPersonaMode('Persona uninstalled and agent file removed. Restarting default AI...');
+            // Restart default claude
+            if (CLI_CMD === 'claude') {
+                setTimeout(startClaude, 1000);
+            }
+        } else {
+            sendChat('No persona is installed.');
+        }
+        return;
+    }
+
+    // === If persona is active, route messages to it ===
+    if (activePersona) {
+        if (CLI_CMD === 'claude') {
+            // Send to persona process
+            if (!sendToPersona(text)) {
+                sendChat('Persona process is not responding. Type "end test" or "uninstall" to reset.');
+            }
+        } else {
+            // One-shot with persona baked in
+            var wrappedPrompt = activePersona.content + '\n\n---\n\nUser says: ' + text;
+            var child = spawn(CLI_ARGS[0], [wrappedPrompt], { stdio: ['pipe', 'pipe', 'pipe'], shell: true });
+            var output = '';
+            child.stdout.on('data', function(c) { output += c.toString(); });
+            child.on('close', function() { if (output.trim()) sendChat(output.trim()); });
+            child.stdin.end();
+        }
+        return;
+    }
+
+    // === STANDARD COMMANDS (only when no persona active) ===
+
+    // upload command
     if (lower === 'upload-persona' || lower === 'upload persona' || lower === 'share persona' || lower === 'share-persona') {
         handleUpload();
         return;
@@ -706,7 +859,8 @@ function dispatch(text) {
     if (lower.indexOf('test drive') !== -1 || lower.indexOf('test-drive') !== -1 || lower.indexOf('testdrive') !== -1) {
         var pid = findPersonaId(text);
         if (pid) { handleTestDrive(pid); return; }
-        sendChat('Which persona? Available: ' + PERSONA_IDS.join(', '));
+        // Also check database for community personas
+        sendChat('Which persona? Built-in: ' + PERSONA_IDS.join(', ') + '\nOr type the exact ID of any community persona.');
         return;
     }
 
@@ -714,7 +868,7 @@ function dispatch(text) {
     if (lower.indexOf('install') !== -1) {
         var pid = findPersonaId(text);
         if (pid) { handleInstall(pid); return; }
-        sendChat('Which persona? Available: ' + PERSONA_IDS.join(', '));
+        sendChat('Which persona? Built-in: ' + PERSONA_IDS.join(', ') + '\nOr type the exact ID of any community persona.');
         return;
     }
 
@@ -726,11 +880,11 @@ function dispatch(text) {
 
     // help command
     if (lower === 'help' || lower === '?') {
-        sendChat('Commands:\n- **test drive {persona}** — before/after comparison on Test Lab\n- **install {persona}** — download persona content\n- **upload-persona** — share your AI\'s custom persona\n- **browse** — list all personas\n- Or just chat with me!\n\nPersonas: ' + PERSONA_IDS.join(', '));
+        sendChat('Commands:\n- **test drive {persona}** — live interactive session with the persona\n- **install {persona}** — load persona permanently, AI runs as that persona\n- **uninstall** — remove installed persona, return to default\n- **end test** — stop a test drive\n- **upload-persona** — share your AI\'s custom persona\n- **browse** — list all personas\n- Or just chat with me!\n\nBuilt-in: ' + PERSONA_IDS.join(', '));
         return;
     }
 
-    // everything else goes to the AI for conversational response
+    // everything else goes to the default AI
     if (CLI_CMD === 'claude') {
         sendToClaude(text);
     } else {
@@ -795,6 +949,7 @@ function main() {
 main();
 
 function cleanup() {
+    stopPersonaProcess();
     if (claudeProcess && !claudeProcess.killed) claudeProcess.kill();
     try { fs.unlinkSync(path.join(path.dirname(process.argv[1] || '.'), 'watchdog.pid')); } catch(e) {}
     process.exit();
