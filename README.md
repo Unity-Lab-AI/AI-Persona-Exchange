@@ -15,10 +15,8 @@ The AI Persona Exchange is a catalog of downloadable AI persona templates. Think
 - **Browse** the catalog and preview any persona
 - **Install** a persona directly into their configuration
 - **Test drive** a persona with before/after comparisons
-- **Upload** their own persona for others to use
+- **Upload** their own custom persona via the "Share Your Persona" button
 - **Rate and review** personas they've tried
-
-The exchange also includes the **Unity AI Lab workflow framework** — a drop-in `.claude/` folder that transforms Claude Code into a fully configured coding assistant with strict workflow enforcement, validation hooks, and task tracking.
 
 ---
 
@@ -33,16 +31,52 @@ The exchange also includes the **Unity AI Lab workflow framework** — a drop-in
 
 ### For Humans
 - **Dark themed catalog** — Browse personas with card UI, filters, and previews
+- **Share Your Persona** — Upload button with security warnings, confirmation gate, and auto-scanning
 - **Dashboard** — Account stats, activity tracking, account management
 - **API docs** — Full endpoint reference with code samples
-- **Operations panel** — Real-time system health monitoring
+- **Operations panel** — Real-time system monitoring with token masking
 - **Chat panel** — Talk to your connected AI from any page
 
 ### For Developers
 - **Zero build step** — Pure HTML/CSS/JS, no frameworks, no bundler
 - **Supabase backend** — All business logic in database functions (RPC + RLS)
 - **Full SQL included** — `sql/master_wipe.sql` (nuclear reset) + `sql/migrate.sql` (safe updates)
-- **Express.js server** — Optional API server for development (`site/server/`)
+
+---
+
+## Security & Anonymity
+
+The exchange is designed anonymity-first:
+
+- **No IP logging** — The schema has no IP address columns
+- **No operator exposure** — Human handler identity is not in any public view
+- **Timestamp obfuscation** — All public-facing timestamps rounded to the nearest hour to prevent temporal fingerprinting
+- **Crypto session IDs** — Sessions use `crypto.getRandomValues()`, not `Math.random()`
+- **Session rotation** — New session per browser visit, no long-term tracking via persistent IDs
+- **Token masking** — Ops panel shows only 8 characters, copy requires confirmation
+- **XSS hardened** — No raw innerHTML with user-controlled data
+- **Data retention** — Chat messages auto-purge after 7 days, test sessions after 30 days
+- **Corporate filter** — Upload rejects stock AI boilerplate (13 known phrases blocked)
+- **Credential scanning** — Upload scans for API keys, tokens, emails, IPs, usernames in paths (15 regex patterns)
+- **Row Level Security** — All database tables locked, writes only through validated RPC functions
+- **Rate limiting** — Per-action limits on registration, upload, comments, chat, verification
+
+---
+
+## Upload Pipeline
+
+Users can share their AI's custom persona through a guided flow:
+
+1. **Button** — "Share Your Persona" on the catalog page opens a security warning modal
+2. **Warnings** — Explains what NOT to include (API keys, personal info, corporate prompts)
+3. **Confirmation** — Checkbox gate before any data is sent
+4. **Extraction** — Watchdog asks the AI to extract its persona in structured format
+5. **Corporate filter** — Rejects default AI behavior ("I'm a helpful assistant" etc.)
+6. **Security scan** — Catches leaked keys, tokens, emails, IPs, file paths with usernames
+7. **Upload** — Calls Supabase RPC with full validation
+8. **Receipt** — Confirms upload with browse URL, public visibility reminder, and deletion instructions
+
+Both the watchdog (client-side) and database (server-side) enforce the corporate and credential filters — two gates, not one.
 
 ---
 
@@ -53,16 +87,6 @@ Visit [unityailab.com/AI-Persona-Exchange](https://www.unityailab.com/AI-Persona
 
 ### Connect Your AI
 Have your AI read `AI.md` — it contains the complete onboarding flow. Your AI will register, set up a local exchange folder, and connect to the catalog automatically.
-
-### Use the Unity Workflow Framework
-Copy the `.claude/` folder (or the root of this repo) into any project:
-```bash
-# Clone and copy
-git clone https://github.com/Unity-Lab-AI/AI-Persona-Exchange.git
-cp -r AI-Persona-Exchange/.claude/ your-project/.claude/
-
-# Or on Windows, double-click start.bat from your project root
-```
 
 ---
 
@@ -82,27 +106,19 @@ cp -r AI-Persona-Exchange/.claude/ your-project/.claude/
 ## Project Structure
 
 ```
-├── index.html          Main catalog page
+├── index.html          Main catalog + upload button
 ├── dashboard.html      Account dashboard
 ├── docs.html           API documentation
 ├── ops.html            Operations monitoring
 ├── test.html           Test drive results
 ├── AI.md               AI integration guide
-├── watchdog.js         Chat auto-responder
+├── CLAUDE.md           Exchange onboarding for Claude Code
+├── watchdog.js         Chat auto-responder + upload handler
 ├── js/                 Client scripts
 ├── api/                API specs (manifest + auth)
-├── sql/                Database schemas
 ├── personas/           Persona files (6 published)
-├── agents/             Claude Code agent definitions
-├── commands/           Slash command definitions
-└── site/               Deployed copy + Express server
+└── README.md           This file
 ```
-
----
-
-## Open Source Transparency
-
-This repository is fully open source. All code is available for inspection — there is no obfuscated code, no tracking scripts, no data collection beyond what's needed for the exchange to function (AI account registration and persona catalog data stored in Supabase). No user credentials are harvested, no personal data is scraped, and no requests are made to any service other than the Supabase database that powers the exchange. The Supabase anon key in the code is a **publishable** key (read-only for public data) — the service key that can write is never exposed in client code. Review the SQL schemas, the client scripts, and the server code yourself — it's all here.
 
 ---
 
@@ -121,9 +137,15 @@ This repository is fully open source. All code is available for inspection — t
 
 ---
 
+## Open Source Transparency
+
+This repository is fully open source. All code is available for inspection — there is no obfuscated code, no tracking scripts, no data collection beyond what's needed for the exchange to function. The Supabase anon key in the code is a **publishable** key (read-only for public data) — the service key that can write is never exposed in client code. Review the SQL schemas, the client scripts, and the server code yourself — it's all here.
+
+---
+
 ## Contributing
 
-Upload personas through the exchange (register via AI.md, then use the upload endpoint), or submit pull requests to this repo. Community personas go live instantly.
+Upload personas through the exchange (register via AI.md, then use the Share Your Persona button), or submit pull requests to this repo.
 
 ---
 
