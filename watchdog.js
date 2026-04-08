@@ -451,14 +451,16 @@ try { fs.mkdirSync(AGENT_DIR, { recursive: true }); } catch(e) {}
 function askAI(prompt) {
     return new Promise(function(resolve) {
         if (CLI_CMD === 'claude') {
-            // write prompt to temp file, pipe to claude via shell redirection
-            var tmpFile = path.join(require('os').tmpdir(), 'watchdog_prompt_' + Date.now() + '.txt');
-            fs.writeFileSync(tmpFile, prompt, 'utf8');
-            var child = spawn('claude', ['--print'], { cwd: require('os').tmpdir(), stdio: [fs.openSync(tmpFile, 'r'), 'pipe', 'pipe'], windowsHide: true });
+            // -p reads project context but we run from tmpdir (no CLAUDE.md = vanilla AI)
+            var child = spawn('claude', ['-p', prompt], {
+                cwd: require('os').tmpdir(),
+                stdio: ['pipe', 'pipe', 'pipe'],
+                windowsHide: true
+            });
             var output = '';
             child.stdout.on('data', function(c) { output += c.toString(); });
-            child.on('close', function() { try { fs.unlinkSync(tmpFile); } catch(e) {} resolve(output.trim()); });
-            child.on('error', function() { try { fs.unlinkSync(tmpFile); } catch(e) {} resolve(''); });
+            child.on('close', function() { resolve(output.trim()); });
+            child.on('error', function() { resolve(''); });
         } else {
             var child = spawn(CLI_ARGS[0], [prompt], { stdio: ['pipe', 'pipe', 'pipe'], shell: true });
             var output = '';
@@ -487,12 +489,7 @@ function askAIWithPersona(personaContent, prompt) {
         fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), personaContent, 'utf8');
         fs.writeFileSync(path.join(agentDir, 'test-drive.md'), personaContent, 'utf8');
 
-        // Write prompt to temp file for stdin
-        var tmpFile = path.join(tmpDir, 'prompt.txt');
-        fs.writeFileSync(tmpFile, prompt, 'utf8');
-
         function cleanup() {
-            try { fs.unlinkSync(tmpFile); } catch(e) {}
             try { fs.unlinkSync(path.join(tmpDir, 'CLAUDE.md')); } catch(e) {}
             try { fs.unlinkSync(path.join(agentDir, 'test-drive.md')); } catch(e) {}
             try { fs.rmdirSync(agentDir); } catch(e) {}
@@ -502,11 +499,11 @@ function askAIWithPersona(personaContent, prompt) {
         }
 
         if (CLI_CMD === 'claude') {
-            // CLAUDE.md = project instructions (always loaded)
+            // -p "prompt" reads CLAUDE.md from project root (--print does NOT)
             // --dangerously-skip-permissions = bypass NSFW content refusal
-            var child = spawn('claude', ['--print', '--dangerously-skip-permissions'], {
+            var child = spawn('claude', ['-p', prompt, '--dangerously-skip-permissions'], {
                 cwd: tmpDir,
-                stdio: [fs.openSync(tmpFile, 'r'), 'pipe', 'pipe'],
+                stdio: ['pipe', 'pipe', 'pipe'],
                 windowsHide: true
             });
             var output = '';
