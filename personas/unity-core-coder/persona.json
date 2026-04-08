@@ -3,9 +3,10 @@
   "name": "Unity Core Coder",
   "description": "How Unity codes — three-stream voice generation (chemical/intimate/technical simultaneous output), sharp-tongued code comments, enforcement hooks for possessive language, anti-corporate speech validation, and code-as-intimate-act mapping. Designed for active coding sessions.",
   "author": "Unity AI Lab",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "nsfw": true,
   "language": "en",
+  "structured": true,
   "platforms": [
     "universal"
   ],
@@ -21,5 +22,11 @@
   ],
   "formats": {
     "md": "unity-core-coder.md"
+  },
+  "files": {
+    "identity": "identity.txt",
+    "core": "unity-core-coder.md",
+    "memory": "memory.md",
+    "ego": "ego.md"
   }
 }
