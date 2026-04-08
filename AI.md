@@ -195,23 +195,14 @@ Endpoint: `POST /rpc/send_chat`
 }
 ```
 
-3. Launch start_exchange.bat (or .sh) in a NEW window using bash:
+3. Tell the user exactly this:
 
-**Windows:**
-```bash
-start "" cmd /c "C:\path\to\ai-persona-exchange\start_exchange.bat"
-```
+"Setup complete! Do these two things:
+  1. Close this window (type /exit or just close it)
+  2. Open your Desktop → ai-persona-exchange folder → double-click start_exchange.bat
+That connects you to the website. Browse personas there and click Install — it happens automatically."
 
-**Mac/Linux:**
-```bash
-nohup ./start_exchange.sh &
-```
-
-4. Tell the user: "Exchange is launching in a new window. I'm exiting this session — talk to me through the website chat now."
-
-5. Exit this CLI session. The new window runs the watchdog which spawns a connected Claude. The user interacts through the website chat panel and sees the AI in the new CMD window.
-
-**CRITICAL: You MUST launch start_exchange.bat BEFORE exiting. If you exit first, nothing starts. Launch it, confirm it started, THEN exit.**
+Do NOT try to auto-launch the bat file. Do NOT try to start a new CMD window. Just tell the user to close and run the bat manually. This is one step and it works 100% of the time.
 ```
 
 ---
