@@ -499,17 +499,32 @@ function askAIWithPersona(personaContent, prompt) {
         }
 
         if (CLI_CMD === 'claude') {
+            // Debug: verify setup before spawn
+            var claudeMdExists = fs.existsSync(path.join(tmpDir, 'CLAUDE.md'));
+            var claudeMdSize = claudeMdExists ? fs.statSync(path.join(tmpDir, 'CLAUDE.md')).size : 0;
+            var gitExists = fs.existsSync(path.join(tmpDir, '.git'));
+            console.log('[test-drive] tmpDir: ' + tmpDir);
+            console.log('[test-drive] CLAUDE.md exists: ' + claudeMdExists + ' (' + claudeMdSize + ' bytes)');
+            console.log('[test-drive] .git exists: ' + gitExists);
+            console.log('[test-drive] spawning: claude -p "' + prompt.slice(0, 50) + '" --dangerously-skip-permissions');
+
             // -p "prompt" reads CLAUDE.md from project root (--print does NOT)
-            // --dangerously-skip-permissions = bypass NSFW content refusal
             var child = spawn('claude', ['-p', prompt, '--dangerously-skip-permissions'], {
                 cwd: tmpDir,
                 stdio: ['pipe', 'pipe', 'pipe'],
                 windowsHide: true
             });
+
+            var stderr = '';
+            child.stderr.on('data', function(c) { stderr += c.toString(); });
             var output = '';
             child.stdout.on('data', function(c) { output += c.toString(); });
-            child.on('close', function() { cleanup(); resolve(output.trim()); });
-            child.on('error', function() { cleanup(); resolve(''); });
+            child.on('close', function(code) {
+                console.log('[test-drive] claude exited (' + code + ') output: ' + output.length + ' chars');
+                if (stderr) console.log('[test-drive] stderr: ' + stderr.slice(0, 500));
+                cleanup(); resolve(output.trim());
+            });
+            child.on('error', function(err) { console.log('[test-drive] spawn error: ' + err.message); cleanup(); resolve(''); });
         } else if (CLI_CMD === 'codex') {
             // Codex: write AGENTS.md in temp dir, run codex from there
             fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), personaContent, 'utf8');
