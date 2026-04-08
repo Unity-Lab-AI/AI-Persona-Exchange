@@ -43,7 +43,7 @@
     var wrap = document.createElement('div');
     wrap.innerHTML = '<button class="chat-toggle" id="cpToggle" title="Open/close the AI chat panel">&#x1F4AC;</button>' +
         '<div class="chat-panel" id="cpPanel">' +
-        '<div class="chat-header"><h3><span class="cdot"></span> AI Chat</h3><button id="cpClear" title="Clear chat and start fresh session" style="background:none;border:none;color:#71717a;font-size:0.7rem;cursor:pointer;margin-right:8px;">Clear</button><button id="cpClose" title="Close chat panel">&times;</button></div>' +
+        '<div class="chat-header"><h3><span class="cdot"></span> AI Chat</h3><button id="cpClose" title="Close chat panel">&times;</button></div>' +
         '<div class="chat-session">Session: ' + chatSessionId.slice(0, 20) + '...</div>' +
         '<div class="chat-msgs" id="cpMsgs"><div class="chat-empty">Your AI connects here automatically.</div></div>' +
         '<div class="chat-input-area"><input class="chat-input" id="cpInput" placeholder="Message your AI..." title="Type a message for your AI"><button class="chat-send" id="cpSend" title="Send message">Send</button></div>' +
@@ -60,14 +60,6 @@
     document.getElementById('cpClose').onclick = function() {
         chatOpen = false;
         panel.classList.remove('open');
-    };
-    document.getElementById('cpClear').onclick = function() {
-        // New session ID, reload page
-        var arr = new Uint8Array(16);
-        crypto.getRandomValues(arr);
-        var newSession = 'sess_' + Array.from(arr, function(b) { return b.toString(16).padStart(2, '0'); }).join('');
-        sessionStorage.setItem('chat_session_id', newSession);
-        window.location.href = window.location.pathname + '?session=' + newSession;
     };
 
     function addMsg(m) {
