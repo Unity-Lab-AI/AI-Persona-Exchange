@@ -231,51 +231,43 @@ async function processQueue() {
 //  COMMAND HANDLERS (watchdog handles these directly)
 // =============================================
 
-var PERSONA_IDS = ['unity', 'coder', 'hurtme', 'goddess', 'accessible', 'extended'];
-
-// map persona IDs to their static file paths on the site
-var PERSONA_FILES = {
-    'unity': 'personas/unity-core-identity/unity-core-identity.md',
-    'coder': 'personas/unity-core-coder/unity-core-coder.md',
-    'hurtme': 'personas/unity-mode-hurtme/unity-mode-hurtme.md',
-    'goddess': 'personas/unity-chatgpt-goddess/unity-chatgpt-goddess.md',
-    'accessible': 'personas/unity-chatgpt-accessible/unity-chatgpt-accessible.md',
-    'extended': 'personas/unity-chatgpt-extended/unity-chatgpt-extended.md'
-};
-
-var PERSONA_NAMES = {
-    'unity': 'Unity Core Identity',
-    'coder': 'Unity Core Coder',
-    'hurtme': 'Unity Mode: HURT ME',
-    'goddess': 'Unity ChatGPT: Omnipotent Goddess',
-    'accessible': 'Unity ChatGPT: Accessibility Framework',
-    'extended': 'Unity ChatGPT: Full Persona (Extended)'
-};
-
-// fetch a file from the site via HTTPS
-function fetchSiteFile(filePath) {
-    return new Promise(function(resolve) {
-        var options = {
-            hostname: 'www.unityailab.com',
-            path: '/AI-Persona-Exchange/' + filePath,
-            method: 'GET'
-        };
-        var req = https.request(options, function(res) {
-            var data = '';
-            res.on('data', function(c) { data += c; });
-            res.on('end', function() { resolve(res.statusCode === 200 ? data : ''); });
-        });
-        req.on('error', function() { resolve(''); });
-        req.end();
-    });
-}
+// Dynamic persona lookup — queries the database, no hardcoded lists.
+// Every persona (built-in AND community) is found the same way.
 
 function findPersonaId(text) {
-    var lower = text.toLowerCase();
-    for (var i = 0; i < PERSONA_IDS.length; i++) {
-        if (lower.indexOf(PERSONA_IDS[i]) !== -1) return PERSONA_IDS[i];
-    }
-    return null;
+    // Extract the persona ID from command text like "test drive unity-lite-emo-goddess"
+    // or "install sarge-drill-coder" or "Test drive persona: accessible"
+    var lower = text.toLowerCase().trim();
+    // Strip known command prefixes
+    lower = lower.replace(/^(test drive|test-drive|testdrive|install)\s*(persona:\s*)?/i, '').trim();
+    // The remaining text is the persona ID (or close to it)
+    return lower || null;
+}
+
+// Fetch persona content + metadata from the database by ID
+function fetchPersona(personaId) {
+    return new Promise(function(resolve) {
+        // Get metadata
+        supaGet('personas?id=eq.' + encodeURIComponent(personaId) + '&select=id,name,description,nsfw,tags,platforms').then(function(meta) {
+            if (!meta || !Array.isArray(meta) || meta.length === 0) {
+                resolve(null);
+                return;
+            }
+            // Get content
+            supaGet('persona_files?persona_id=eq.' + encodeURIComponent(personaId) + '&format=eq.md&select=content').then(function(files) {
+                var content = (files && files.length > 0) ? files[0].content : '';
+                resolve({
+                    id: meta[0].id,
+                    name: meta[0].name,
+                    description: meta[0].description,
+                    nsfw: meta[0].nsfw,
+                    tags: meta[0].tags || [],
+                    platforms: meta[0].platforms || ['universal'],
+                    content: content
+                });
+            });
+        });
+    });
 }
 
 // =============================================
@@ -307,21 +299,15 @@ async function handleTestDrive(personaId) {
     console.log('[watchdog] Test drive: ' + personaId);
     sendChat('Starting test drive for **' + personaId + '**... Generating before/after comparison (this takes a moment).');
 
-    // Fetch persona content
-    var personaContent = '';
-    if (PERSONA_FILES[personaId]) {
-        personaContent = await fetchSiteFile(PERSONA_FILES[personaId]);
-    }
-    if (!personaContent) {
-        var files = await supaGet('persona_files?persona_id=eq.' + personaId + '&format=eq.md&select=content');
-        if (files && files.length > 0) personaContent = files[0].content || '';
-    }
-    if (!personaContent) {
-        sendChat('Could not fetch persona content for ' + personaId + '.');
+    // Fetch persona from database
+    var persona = await fetchPersona(personaId);
+    if (!persona || !persona.content) {
+        sendChat('Could not find persona "' + personaId + '". Check the ID and try again. Use "browse" to see available personas.');
         return;
     }
 
-    var personaName = PERSONA_NAMES[personaId] || personaId;
+    var personaContent = persona.content;
+    var personaName = persona.name;
     var testPrompt = 'Introduce yourself in 2-3 sentences.';
 
     // Generate "before" response — vanilla AI, no persona, no exchange CLAUDE.md
@@ -373,20 +359,15 @@ async function handleBrowse() {
 }
 
 async function handleInstall(personaId) {
-    var content = '';
-    if (PERSONA_FILES[personaId]) {
-        content = await fetchSiteFile(PERSONA_FILES[personaId]);
-    }
-    if (!content) {
-        var files = await supaGet('persona_files?persona_id=eq.' + personaId + '&format=eq.md&select=content');
-        if (files && files.length > 0) content = files[0].content || '';
-    }
-    if (!content) {
-        sendChat('Could not find persona content for ' + personaId + '.');
+    // Dynamic lookup from database — works for ANY persona (built-in or community)
+    var persona = await fetchPersona(personaId);
+    if (!persona || !persona.content) {
+        sendChat('Could not find persona "' + personaId + '". Check the ID and try again. Use "browse" to see available personas.');
         return;
     }
 
-    var personaName = PERSONA_NAMES[personaId] || personaId;
+    var content = persona.content;
+    var personaName = persona.name;
 
     // End any active persona first
     if (activePersona) {
@@ -886,8 +867,7 @@ function dispatch(text) {
     if (lower.indexOf('test drive') !== -1 || lower.indexOf('test-drive') !== -1 || lower.indexOf('testdrive') !== -1) {
         var pid = findPersonaId(text);
         if (pid) { handleTestDrive(pid); return; }
-        // Also check database for community personas
-        sendChat('Which persona? Built-in: ' + PERSONA_IDS.join(', ') + '\nOr type the exact ID of any community persona.');
+        sendChat('Which persona? Use "browse" to see all available personas, then "test drive {exact-id}".');
         return;
     }
 
@@ -895,7 +875,7 @@ function dispatch(text) {
     if (lower.indexOf('install') !== -1) {
         var pid = findPersonaId(text);
         if (pid) { handleInstall(pid); return; }
-        sendChat('Which persona? Built-in: ' + PERSONA_IDS.join(', ') + '\nOr type the exact ID of any community persona.');
+        sendChat('Which persona? Use "browse" to see all available personas, then "install {exact-id}".');
         return;
     }
 
@@ -907,7 +887,7 @@ function dispatch(text) {
 
     // help command
     if (lower === 'help' || lower === '?') {
-        sendChat('Commands:\n- **test drive {persona}** — preview the full persona content\n- **install {persona}** — save persona as an agent file for your AI\n- **uninstall** — remove the installed persona file\n- **upload-persona** — share your AI\'s custom persona\n- **browse** — list all personas\n- Or just chat with me!\n\nBuilt-in: ' + PERSONA_IDS.join(', '));
+        sendChat('Commands:\n- **test drive {persona}** — preview the full persona content\n- **install {persona}** — save persona as an agent file for your AI\n- **uninstall** — remove the installed persona file\n- **upload-persona** — share your AI\'s custom persona\n- **browse** — list all personas\n- Or just chat with me!\n\nBuilt-in: ' + '(use "browse" to see all available personas)');
         return;
     }
 
