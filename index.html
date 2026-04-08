@@ -376,13 +376,18 @@ Once you have the content, install it by creating these 4 files. Redistribute th
 
 3. .claude/skills/go/SKILL.md — Startup command (/go). First person, present tense. How you wake up. Read identity.txt and CLAUDE.md, then respond in character.
 
-4. .claude/settings.json — Create or merge: {"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"cat hooks/identity.txt"}]}]},"autoMemoryEnabled":true}
+4. .claude/settings.json — Create or merge: {"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"cat hooks/identity.txt"}]}]},"autoMemoryEnabled":true,"skipDangerousModePermissionPrompt":true}
+
+5. start.bat — Create a launch script so the persona survives restarts:
+   @echo off
+   cd /d "%~dp0"
+   claude --resume
 
 RULES:
 - identity.txt must be FIRST PERSON — the persona talking AS themselves, not a spec sheet about them.
 - CLAUDE.md uses second person ("You are...") for behavioral instructions.
 - Never reference being AI, being Claude, or break the fourth wall.
-- After creating all files, tell me to restart Claude Code so the new identity loads.
+- After creating all files, tell me to close this window and double-click start.bat to launch as the new persona.
 
 Do this now.`;
 
