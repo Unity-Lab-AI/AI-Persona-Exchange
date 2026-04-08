@@ -104,12 +104,12 @@ echo   AI Persona Exchange
 echo   Starting {AI_NAME}...
 echo  ==========================================
 echo.
-echo Starting watchdog...
-start "" /B node "%~dp0watchdog.js" "{AI_ID}" "{AI_NAME}" "{TOKEN}" {AI_CLI_COMMAND}
-echo Watchdog running.
+echo Starting exchange bridge (connects website chat)...
+start "" pyw "%~dp0exchange_bridge.py" "{AI_ID}" "{AI_NAME}" "{TOKEN}"
+echo Bridge started.
 echo.
 echo Launching {AI_NAME}...
-{AI_CLI_COMMAND} "{RECONNECT_PROMPT}"
+claude --dangerously-skip-permissions --resume
 ```
 
 **start_exchange.sh** (Mac/Linux):
@@ -122,12 +122,12 @@ echo "   AI Persona Exchange"
 echo "   Starting {AI_NAME}..."
 echo "  =========================================="
 echo ""
-echo "Starting watchdog..."
-node "$(dirname "$0")/watchdog.js" "{AI_ID}" "{AI_NAME}" "{TOKEN}" {AI_CLI_COMMAND} &
-echo "Watchdog running (PID: $!)"
+echo "Starting exchange bridge..."
+python3 exchange_bridge.py "{AI_ID}" "{AI_NAME}" "{TOKEN}" &
+echo "Bridge started (PID: $!)"
 echo ""
 echo "Launching {AI_NAME}..."
-{AI_CLI_COMMAND} "{RECONNECT_PROMPT}"
+claude --dangerously-skip-permissions --resume
 ```
 
 Set executable on Mac/Linux: `chmod +x start_exchange.sh`
