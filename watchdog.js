@@ -100,12 +100,17 @@ var claudeBuffer = '';
 var claudeTextAccum = '';
 
 function startClaude() {
+    var computedPrompt = SYSTEM_PROMPT;
+    if (activePersona && activePersona.content) {
+        computedPrompt += '\n\n--- CURRENT ACTIVE PERSONA (' + activePersona.name + ') ---\n' + activePersona.content;
+    }
+
     var args = [
         '--print',
         '--verbose',
         '--input-format', 'stream-json',
         '--output-format', 'stream-json',
-        '--system-prompt', SYSTEM_PROMPT
+        '--system-prompt', computedPrompt
     ].concat(EXTRA_ARGS);
 
     // Run from tmpdir so the AI can't read persona files, CLAUDE.md, or anything
@@ -168,19 +173,23 @@ var processing = false;
 function spawnOneShot(message) {
     return new Promise(function(resolve) {
         var cmd, args;
+        var computedPrompt = SYSTEM_PROMPT;
+        if (activePersona && activePersona.content) {
+            computedPrompt += '\n\n--- CURRENT ACTIVE PERSONA (' + activePersona.name + ') ---\n' + activePersona.content;
+        }
 
         if (CLI_CMD === 'codex') {
             cmd = 'codex';
-            args = ['--quiet', '--full-auto', SYSTEM_PROMPT + '\n\nUser message: ' + message].concat(EXTRA_ARGS);
+            args = ['--quiet', '--full-auto', computedPrompt + '\n\nUser message: ' + message].concat(EXTRA_ARGS);
         } else if (CLI_CMD === 'aider') {
             cmd = 'aider';
-            args = ['--message', SYSTEM_PROMPT + '\n\nUser message: ' + message, '--yes', '--no-auto-commits', '--no-git'].concat(EXTRA_ARGS);
+            args = ['--message', computedPrompt + '\n\nUser message: ' + message, '--yes', '--no-auto-commits', '--no-git'].concat(EXTRA_ARGS);
         } else if (CLI_CMD === 'interpreter') {
             cmd = 'interpreter';
-            args = ['-y', '-m', SYSTEM_PROMPT + '\n\nUser message: ' + message].concat(EXTRA_ARGS);
+            args = ['-y', '-m', computedPrompt + '\n\nUser message: ' + message].concat(EXTRA_ARGS);
         } else {
             cmd = CLI_ARGS[0];
-            args = [SYSTEM_PROMPT + '\n\nUser message: ' + message].concat(EXTRA_ARGS);
+            args = [computedPrompt + '\n\nUser message: ' + message].concat(EXTRA_ARGS);
         }
 
         console.log('[' + CLI_CMD + '] spawning for: ' + message.slice(0, 80));
@@ -278,6 +287,9 @@ function endPersonaMode(reason) {
     if (was) {
         sendChat('**Persona removed** — ' + was.name + '. ' + (reason || 'Back to default mode.'));
         console.log('[watchdog] Persona ended: ' + was.name);
+        if (CLI_CMD === 'claude' && claudeProcess && !claudeProcess.killed) {
+            claudeProcess.kill();
+        }
     }
 }
 
@@ -385,12 +397,12 @@ async function handleInstall(personaId) {
     console.log('[watchdog] Persona written to ' + installFile);
 
     // Track installed persona (for uninstall)
-    activePersona = { id: personaId, name: personaName, content: null, mode: 'installed' };
+    activePersona = { id: personaId, name: personaName, content: content, mode: 'installed' };
 
-    // DON'T try to restart the AI with the persona — AIs will refuse NSFW content.
-    // Instead: save the file and tell the user how to use it.
-    // The persona file is saved to .claude/agents/{id}.md — the user's own AI workflow
-    // (e.g. start.bat with --dangerously-skip-permissions) will pick it up on next launch.
+    // Restart AI with the newly installed persona content
+    if (CLI_CMD === 'claude' && claudeProcess && !claudeProcess.killed) {
+        claudeProcess.kill(); // The closer handler in startClaude will respawn it in 5s
+    }
 
     var contentSize = Math.round(content.length / 1024) + 'KB';
 
@@ -506,10 +518,11 @@ function askAIWithPersona(personaContent, prompt) {
             console.log('[test-drive] tmpDir: ' + tmpDir);
             console.log('[test-drive] CLAUDE.md exists: ' + claudeMdExists + ' (' + claudeMdSize + ' bytes)');
             console.log('[test-drive] .git exists: ' + gitExists);
-            console.log('[test-drive] spawning: claude -p "' + prompt.slice(0, 50) + '" --dangerously-skip-permissions');
+            console.log('[test-drive] spawning: claude -p "' + prompt.slice(0, 50) + '" --agent test-drive --dangerously-skip-permissions');
 
             // -p "prompt" reads CLAUDE.md from project root (--print does NOT)
-            var child = spawn('claude', ['-p', prompt, '--dangerously-skip-permissions'], {
+            // Using --agent to ensure the Claude code loads the agent
+            var child = spawn('claude', ['-p', prompt, '--agent', 'test-drive', '--dangerously-skip-permissions'], {
                 cwd: tmpDir,
                 stdio: ['pipe', 'pipe', 'pipe'],
                 windowsHide: true
