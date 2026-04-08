@@ -294,10 +294,14 @@ function startPersonaProcess(personaContent, personaName, mode) {
             '--output-format', 'stream-json'
         ];
 
+        console.log('[persona] spawning: claude ' + args.join(' '));
+        console.log('[persona] cwd: ' + personaWorkDir);
+        console.log('[persona] CLAUDE.md size: ' + fs.statSync(path.join(personaWorkDir, 'CLAUDE.md')).size + ' bytes');
+
         personaProcess = spawn('claude', args, {
             cwd: personaWorkDir,
             stdio: ['pipe', 'pipe', 'inherit'],
-            shell: true
+            windowsHide: true
         });
 
         personaBuffer = '';
