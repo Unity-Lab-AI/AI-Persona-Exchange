@@ -448,9 +448,10 @@ function askAI(prompt) {
     return new Promise(function(resolve) {
         if (CLI_CMD === 'claude') {
             // -p reads project context but we run from tmpdir (no CLAUDE.md = vanilla AI)
+            // stdin set to 'ignore' so claude doesn't wait for piped input
             var child = spawn('claude', ['-p', prompt], {
                 cwd: require('os').tmpdir(),
-                stdio: ['pipe', 'pipe', 'pipe'],
+                stdio: ['ignore', 'pipe', 'pipe'],
                 windowsHide: true
             });
             var output = '';
@@ -511,7 +512,7 @@ function askAIWithPersona(personaContent, prompt) {
             // Trigger claude -p using --system-prompt-file to solidly lock identity
             var child = spawn('claude', ['-p', prompt, '--system-prompt-file', spPath, '--dangerously-skip-permissions'], {
                 cwd: tmpDir,
-                stdio: ['pipe', 'pipe', 'pipe'],
+                stdio: ['ignore', 'pipe', 'pipe'],
                 windowsHide: true
             });
 
