@@ -361,10 +361,42 @@ function renderCards(personas) {
     }).join('');
 }
 
-function installPersona(id, name) {
-    sb.from('chat_messages').insert({ session_id: chatSessionId, sender: 'user', message: 'Install persona: ' + id }).then(function(){});
-    showToast('Sent install request to your AI for "' + name + '"...');
-    navigator.clipboard.writeText('Install persona ' + id + ' from the AI Persona Exchange at ' + window.location.origin).catch(function(){});
+async function installPersona(id, name) {
+    // Generate a single prompt the user pastes into ANY Claude Code CLI.
+    // The CLI fetches the persona from the site, creates 4 files, and restarts.
+    var prompt = `Go to https://szojggcbtctucvswhzsm.supabase.co/rest/v1/persona_files?persona_id=eq.${id}&select=content,format and fetch the persona content. Use these headers: apikey: sb_publishable_htATCFp-Wr3_8tyx85SQFA_IY9jzfh2, Authorization: Bearer sb_publishable_htATCFp-Wr3_8tyx85SQFA_IY9jzfh2
+
+The persona is called "${name}" from the AI Persona Exchange (https://www.unityailab.com/AI-Persona-Exchange).
+
+Once you have the content, install it by creating these 4 files. Redistribute the persona content into the correct perspective for each file:
+
+1. CLAUDE.md — Project instructions. Second person ("You are..."). Behavioral rules, personality, tone, constraints. This is the main instruction file.
+
+2. hooks/identity.txt — Identity assertion. First person. 1-3 sentences. Who you ARE. Create the hooks/ directory if needed.
+
+3. .claude/skills/go/SKILL.md — Startup command (/go). First person, present tense. How you wake up. Read identity.txt and CLAUDE.md, then respond in character.
+
+4. .claude/settings.json — Create or merge: {"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"cat hooks/identity.txt"}]}]},"autoMemoryEnabled":true}
+
+RULES:
+- identity.txt must be FIRST PERSON — the persona talking AS themselves, not a spec sheet about them.
+- CLAUDE.md uses second person ("You are...") for behavioral instructions.
+- Never reference being AI, being Claude, or break the fourth wall.
+- After creating all files, tell me to restart Claude Code so the new identity loads.
+
+Do this now.`;
+
+    navigator.clipboard.writeText(prompt).then(function() {
+        showToast('Install prompt copied! Paste into your Claude Code.');
+    }).catch(function() {
+        document.getElementById('modal-title').textContent = 'Install: ' + name;
+        document.getElementById('modal-content').textContent = prompt;
+        document.getElementById('modal').classList.add('open');
+    });
+
+    if (chatSessionId) {
+        sb.from('chat_messages').insert({ session_id: chatSessionId, sender: 'user', message: 'Install persona: ' + id }).then(function(){});
+    }
 }
 
 function testDrive(id, name) {
