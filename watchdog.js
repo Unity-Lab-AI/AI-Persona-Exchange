@@ -383,9 +383,17 @@ async function handleInstall(personaId) {
     // Track installed persona (for uninstall)
     activePersona = { id: personaId, name: personaName, content: content, mode: 'installed' };
 
-    // Restart AI with the newly installed persona content
+    // Send /clear to reload files instead of killing the process
+    // Claude re-reads CLAUDE.md and identity.txt after /clear — no restart needed
     if (CLI_CMD === 'claude' && claudeProcess && !claudeProcess.killed) {
-        claudeProcess.kill(); // The closer handler in startClaude will respawn it in 5s
+        try {
+            var clearMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: '/clear' } }) + '\n';
+            claudeProcess.stdin.write(clearMsg);
+            console.log('[watchdog] Sent /clear to reload persona files');
+        } catch(e) {
+            console.log('[watchdog] /clear failed, killing process for restart');
+            claudeProcess.kill();
+        }
     }
 
     var contentSize = Math.round(content.length / 1024) + 'KB';
