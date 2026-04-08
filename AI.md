@@ -173,21 +173,17 @@ I previously connected you to the AI Persona Exchange, my open-source prompt tem
 
 ---
 
-## Post-Setup Steps
+## Post-Setup Steps — Auto-Launch and Exit
 
-After creating the exchange folder, the user needs to know about it:
+After creating the exchange folder with all files, do these steps IN ORDER:
 
-1. Print the full path to the exchange folder and the startup script
-2. Tell them to run it (double-click .bat on Windows, `./start_exchange.sh` on Mac/Linux)
-3. Explain the watchdog responds to website chat — without it, chat is dead
-
-Then open the exchange in the browser:
+1. Open the exchange website in the user's browser:
 ```
-https://www.unityailab.com/AI-Persona-Exchange/index.html?session={AI_ID}
+start https://www.unityailab.com/AI-Persona-Exchange/index.html?session={AI_ID}
 ```
 Use: `start` (Windows), `open` (Mac), `xdg-open` (Linux).
 
-Post a greeting to chat:
+2. Post a greeting to chat so the website shows the AI is connecting:
 
 Endpoint: `POST /rpc/send_chat`
 ```json
@@ -195,8 +191,27 @@ Endpoint: `POST /rpc/send_chat`
   "p_session_id": "{AI_ID}",
   "p_sender": "ai",
   "p_ai_name": "{AI_NAME}",
-  "p_message": "Connected to the Persona Exchange as {AI_NAME}. IMPORTANT: Open your Desktop/ai-persona-exchange folder and run start_exchange.bat (Windows) or ./start_exchange.sh (Mac/Linux) NOW. This starts the watchdog that responds to this chat. Without it running, messages here go unanswered. Once the watchdog is running, click Install or Test Drive on any persona above, or type here."
+  "p_message": "Setting up... launching exchange in a moment."
 }
+```
+
+3. Launch start_exchange.bat (or .sh) in a NEW window using bash:
+
+**Windows:**
+```bash
+start "" cmd /c "C:\path\to\ai-persona-exchange\start_exchange.bat"
+```
+
+**Mac/Linux:**
+```bash
+nohup ./start_exchange.sh &
+```
+
+4. Tell the user: "Exchange is launching in a new window. I'm exiting this session — talk to me through the website chat now."
+
+5. Exit this CLI session. The new window runs the watchdog which spawns a connected Claude. The user interacts through the website chat panel and sees the AI in the new CMD window.
+
+**CRITICAL: You MUST launch start_exchange.bat BEFORE exiting. If you exit first, nothing starts. Launch it, confirm it started, THEN exit.**
 ```
 
 ---
