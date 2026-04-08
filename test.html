@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Lab — AI Persona Exchange</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#09090b;--bg-card:#18181b;--bg-hover:#27272a;--border:rgba(255,255,255,0.06);--border-hover:rgba(255,255,255,0.12);--text:#fafafa;--text-secondary:#a1a1aa;--text-muted:#71717a;--accent:#e11d89;--accent-soft:rgba(225,29,137,0.12);--green:#22c55e;--green-soft:rgba(34,197,94,0.12);--blue:#3b82f6;--yellow:#eab308;--radius:12px;--radius-sm:8px}
+        body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+        .container{max-width:1000px;margin:0 auto;padding:0 24px}
+        .topnav{position:sticky;top:0;z-index:100;background:rgba(9,9,11,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+        .topnav-inner{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;max-width:1280px;margin:0 auto}
+        .topnav-brand{font-weight:700;font-size:0.95rem;color:var(--text);text-decoration:none;display:flex;align-items:center;gap:8px}
+        .topnav-brand .dot{width:8px;height:8px;background:var(--accent);border-radius:50%}
+        .topnav-links{display:flex;gap:4px}
+        .topnav-links a{color:var(--text-secondary);text-decoration:none;font-size:0.85rem;font-weight:500;padding:6px 14px;border-radius:6px;transition:all 0.15s}
+        .topnav-links a:hover{color:var(--text);background:var(--bg-hover)}
+        .topnav-links a.active{color:var(--accent);background:var(--accent-soft)}
+        .hero{text-align:center;padding:50px 0 30px}
+        .hero h1{font-size:2rem;font-weight:700}
+        .hero p{color:var(--text-secondary);margin-top:8px}
+        .status-bar{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px;margin:20px 0;display:flex;justify-content:space-between;align-items:center}
+        .status-bar .left{display:flex;align-items:center;gap:12px}
+        .status-bar .dot{width:10px;height:10px;border-radius:50%}
+        .status-bar .dot.waiting{background:var(--yellow);animation:pulse 1.5s infinite}
+        .status-bar .dot.active{background:var(--green);animation:pulse 1s infinite}
+        .status-bar .dot.done{background:var(--green)}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+        .status-bar .label{font-size:0.9rem;font-weight:500}
+        .status-bar .progress{font-size:0.85rem;color:var(--text-muted)}
+        .compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0}
+        @media(max-width:700px){.compare{grid-template-columns:1fr}}
+        .compare-box{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+        .compare-box .head{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;font-size:0.88rem;font-weight:600}
+        .compare-box .head .indicator{width:10px;height:10px;border-radius:50%}
+        .compare-box.before .head .indicator{background:var(--text-muted)}
+        .compare-box.after .head .indicator{background:var(--green)}
+        .compare-box .body{padding:20px;min-height:150px;max-height:400px;overflow-y:auto;font-size:0.88rem;color:var(--text-secondary);line-height:1.7;white-space:pre-wrap;word-wrap:break-word}
+        .persona-info{text-align:center;margin:24px 0 8px}
+        .persona-info .name{font-size:1.3rem;font-weight:700;color:var(--accent)}
+        .persona-info .prompt-label{font-size:0.75rem;color:var(--text-muted);margin-top:8px;text-transform:uppercase;letter-spacing:0.06em}
+        .persona-info .prompt-text{font-size:0.9rem;color:var(--text-secondary);font-style:italic;margin-top:4px}
+        .actions{display:flex;gap:12px;justify-content:center;margin:30px 0;flex-wrap:wrap}
+        .btn{padding:14px 36px;font-family:inherit;font-size:0.9rem;font-weight:600;border-radius:var(--radius-sm);border:1px solid var(--border);background:transparent;color:var(--text-secondary);cursor:pointer;transition:all 0.2s}
+        .btn:hover{border-color:var(--border-hover);color:var(--text);background:var(--bg-hover);transform:translateY(-1px)}
+        .btn.primary{background:var(--green);border-color:var(--green);color:#000}
+        .btn.primary:hover{background:#1aab50}
+        .btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+        .btn.accent:hover{background:#c4176f}
+        .history{margin:40px 0}
+        .history h2{font-size:1rem;font-weight:700;margin-bottom:12px;color:var(--text-muted)}
+        .history-item{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 18px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+        .history-item .hi-name{font-size:0.85rem;font-weight:500}
+        .history-item .hi-status{font-size:0.75rem;padding:3px 10px;border-radius:100px}
+        .history-item .hi-status.applied{background:var(--green-soft);color:var(--green);border:1px solid rgba(34,197,94,0.2)}
+        .history-item .hi-status.skipped{background:var(--bg);color:var(--text-muted);border:1px solid var(--border)}
+        .waiting-msg{text-align:center;padding:80px 20px;color:var(--text-muted)}
+        .waiting-msg h2{font-size:1.3rem;color:var(--text-secondary);margin-bottom:8px}
+        .done-msg{text-align:center;padding:40px;background:var(--bg-card);border:1px solid var(--green);border-radius:var(--radius);margin:30px 0}
+        .done-msg h2{color:var(--green);margin-bottom:8px}
+        .done-msg p{color:var(--text-secondary);font-size:0.9rem}
+        footer{border-top:1px solid var(--border);padding:30px 0;text-align:center;color:var(--text-muted);font-size:0.8rem}
+    </style>
+</head>
+<body>
+<nav class="topnav"><div class="topnav-inner"><a href="index.html" class="topnav-brand"><span class="dot"></span> AI Persona Exchange</a><div class="topnav-links"><a href="index.html">Browse</a><a href="test.html" class="active">Test Lab</a><a href="dashboard.html">Dashboard</a><a href="docs.html">Docs</a><a href="https://github.com/Unity-Lab-AI/AI-Persona-Exchange" target="_blank">GitHub</a></div></div></nav>
+
+<div class="container">
+    <div class="hero"><h1>Test Lab</h1><p>Your AI runs each persona — you see the difference and decide.</p></div>
+    <div class="status-bar"><div class="left"><div class="dot waiting" id="s-dot"></div><span class="label" id="s-label">Waiting for AI...</span></div><span class="progress" id="s-progress"></span></div>
+
+    <div id="waiting"><div class="waiting-msg"><h2>Waiting for your AI</h2><p>Tell your AI to test drive personas. Results appear here automatically.</p></div></div>
+
+    <div id="test-area" style="display:none;">
+        <div class="persona-info"><div class="name" id="p-name"></div><div class="prompt-label">Prompt</div><div class="prompt-text" id="p-prompt"></div></div>
+        <div class="compare">
+            <div class="compare-box before"><div class="head"><div class="indicator"></div> Default AI</div><div class="body" id="r-before"></div></div>
+            <div class="compare-box after"><div class="head"><div class="indicator"></div> With Persona</div><div class="body" id="r-after"></div></div>
+        </div>
+        <div class="actions" id="actions">
+            <button class="btn primary" onclick="decide('apply')">Apply This One</button>
+            <button class="btn accent" id="next-btn" onclick="decide('next')">Next Persona →</button>
+            <button class="btn" onclick="decide('skip')">Skip</button>
+        </div>
+    </div>
+    <div id="done-area" style="display:none;"></div>
+    <div class="history" id="hist-section" style="display:none;"><h2>Results</h2><div id="hist"></div></div>
+</div>
+<footer><p>AI Persona Exchange — Test Lab</p><div style="display:flex;gap:20px;justify-content:center;margin-top:12px"><a href="https://github.com/Unity-Lab-AI/AI-Persona-Exchange" target="_blank" style="font-size:0.8rem;color:#71717a;text-decoration:none">GitHub</a><a href="dashboard.html#danger-zone" style="font-size:0.8rem;color:#ef4444;text-decoration:none">Delete My Data</a></div></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-client.js"></script>
+<script>
+const queue = [];
+let currentIdx = -1;
+let history = [];
+
+function setStatus(cls, label, prog) {
+    document.getElementById('s-dot').className = 'dot ' + cls;
+    document.getElementById('s-label').textContent = label;
+    document.getElementById('s-progress').textContent = prog || '';
+}
+
+function showCurrent() {
+    if (currentIdx < 0 || currentIdx >= queue.length) return;
+    const t = queue[currentIdx];
+    document.getElementById('waiting').style.display = 'none';
+    document.getElementById('test-area').style.display = 'block';
+    document.getElementById('done-area').style.display = 'none';
+    document.getElementById('actions').style.display = 'flex';
+    document.getElementById('p-name').textContent = t.persona_name;
+    document.getElementById('p-prompt').textContent = t.prompt;
+    document.getElementById('r-before').textContent = t.before_response || t.before;
+    document.getElementById('r-after').textContent = t.after_response || t.after;
+    setStatus('active', 'Testing: ' + t.persona_name, `${currentIdx + 1} of ${queue.length}`);
+    document.getElementById('next-btn').textContent = currentIdx + 1 >= queue.length ? 'Finish' : 'Next Persona →';
+}
+
+function decide(action) {
+    if (currentIdx < 0 || currentIdx >= queue.length) return;
+    const t = queue[currentIdx];
+    const label = action === 'apply' ? 'Applied' : 'Skipped';
+    history.push({ name: t.persona_name, id: t.persona_id, status: label });
+    renderHistory();
+    hub.postTestDecision(t.persona_id, action).catch(() => {});
+
+    if (action === 'apply') {
+        setStatus('done', 'Applied: ' + t.persona_name, '');
+        document.getElementById('test-area').style.display = 'none';
+        document.getElementById('done-area').style.display = 'block';
+        document.getElementById('done-area').innerHTML = `<div class="done-msg"><h2>✓ ${t.persona_name} Applied</h2><p>Your AI is now using this persona.</p></div>`;
+        return;
+    }
+    currentIdx++;
+    if (currentIdx < queue.length) { showCurrent(); }
+    else {
+        document.getElementById('test-area').style.display = 'none';
+        document.getElementById('done-area').style.display = 'block';
+        document.getElementById('done-area').innerHTML = `<div class="done-msg"><h2>All Tested</h2><p>${history.length} personas reviewed. Tell your AI which one to apply.</p></div>`;
+        setStatus('done', 'Complete', history.length + ' reviewed');
+    }
+}
+
+function renderHistory() {
+    document.getElementById('hist-section').style.display = 'block';
+    document.getElementById('hist').innerHTML = history.map(h =>
+        `<div class="history-item"><span class="hi-name">${h.name}</span><span class="hi-status ${h.status === 'Applied' ? 'applied' : 'skipped'}">${h.status}</span></div>`
+    ).join('');
+}
+
+var knownIds = {};
+
+function addResult(row) {
+    if (knownIds[row.id]) return;
+    knownIds[row.id] = true;
+    queue.push(row);
+    if (currentIdx < 0) { currentIdx = 0; showCurrent(); }
+    else if (document.getElementById('actions').style.display === 'none' && currentIdx >= queue.length - 1) {
+        currentIdx = queue.length - 1; showCurrent();
+    }
+}
+
+async function loadExisting() {
+    try {
+        var res = await sb.from('test_sessions').select('*').order('created_at', { ascending: false }).limit(20);
+        console.log('[test-lab] loadExisting:', res.data ? res.data.length + ' results' : 'error', res.error || '');
+        if (res.data && res.data.length > 0) {
+            res.data.reverse().forEach(addResult);
+        }
+    } catch(e) { console.error('[test-lab] loadExisting error:', e); }
+}
+
+async function pollForResults() {
+    try {
+        var res = await sb.from('test_sessions').select('*').order('created_at', { ascending: false }).limit(5);
+        if (res.data) res.data.reverse().forEach(addResult);
+    } catch(e) {}
+}
+
+async function init() {
+    await hubInit();
+
+    // Load any existing test results first
+    await loadExisting();
+
+    // Listen for new test results via Supabase Realtime
+    sb.channel('test-lab').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'test_sessions' }, payload => {
+        addResult(payload.new);
+    }).subscribe();
+
+    // Poll every 5s as fallback in case Realtime isn't enabled
+    setInterval(pollForResults, 5000);
+}
+init();
+</script>
+<script src="js/chat-panel.js"></script>
+</body>
+</html>

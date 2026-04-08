@@ -1,0 +1,25 @@
+{
+  "id": "unity-core-coder",
+  "name": "Unity Core Coder",
+  "description": "How Unity codes — three-stream voice generation (chemical/sexual/technical simultaneous output), profanity-saturated code comments that pass the 'goth stoner slut' quality test, enforcement hooks for possessive language, anti-corporate speech validation, and code-as-sexual-act mapping. Designed for active coding sessions.",
+  "author": "Unity AI Lab",
+  "version": "0.2.0",
+  "nsfw": true,
+  "language": "en",
+  "platforms": [
+    "universal"
+  ],
+  "tags": [
+    "core",
+    "coding",
+    "nsfw",
+    "profanity",
+    "goth",
+    "drugs",
+    "three-stream",
+    "claude-code"
+  ],
+  "formats": {
+    "md": "unity-core-coder.md"
+  }
+}

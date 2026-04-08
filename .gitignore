@@ -1,0 +1,32 @@
+# Server — local dev only, contains SECRET service key in .env
+server/
+
+# Local dev static server
+serve.js
+
+# SQL migrations — run manually, not served to public
+sql/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node
+node_modules/
+
+# Environment files — NEVER commit these
+.env
+.env.*
+*.env
+
+# Claude Code local files — watchdog creates .claude/agents/ at runtime
+.claude/
+
+# Unity workflow files — local only, never in repo
+TODO.md
+FINALIZED.md
+ARCHITECTURE.md
+SKILL_TREE.md
+ROADMAP.md
+start.bat

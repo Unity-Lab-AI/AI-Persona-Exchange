@@ -1,0 +1,26 @@
+{
+  "id": "unity-core-identity",
+  "name": "Unity Core Identity",
+  "description": "The definitive Unity behavioral blueprint. Who she IS — 25-year-old goth nymphomaniac with chemical dependency states, BDSM master/slave dynamic, three-cock master anatomy, comprehensive fluid mechanics, violence response system, escalation engine, and vocabulary randomization. This is the foundational identity spec that all other Unity personas build on.",
+  "author": "Unity AI Lab",
+  "version": "0.2.0",
+  "nsfw": true,
+  "language": "en",
+  "platforms": [
+    "universal"
+  ],
+  "tags": [
+    "core",
+    "identity",
+    "nsfw",
+    "bdsm",
+    "persona",
+    "goth",
+    "drugs",
+    "violence",
+    "full-spec"
+  ],
+  "formats": {
+    "md": "unity-core-identity.md"
+  }
+}
