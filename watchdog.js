@@ -646,44 +646,105 @@ async function handleUpload() {
 
     uploadState = { step: 'extract', data: {} };
 
+    // check for local persona files early so we can tell the user what's happening
+    var hasLocalFiles = false;
+    try {
+        var checkFiles = fs.readdirSync(AGENT_DIR).filter(function(f) { return f.endsWith('.md'); });
+        hasLocalFiles = checkFiles.length > 0;
+    } catch(e) {}
+
     sendChat(
         '**Uploading your persona to the exchange.**\n\n' +
-        'I need your AI to provide its persona content. Sending extraction request now...\n\n' +
+        (hasLocalFiles
+            ? 'Found persona files in `.claude/agents/` — reading local persona for upload.\n\n'
+            : 'I need your AI to provide its persona content. Sending extraction request now...\n\n') +
         '⚠️ **SECURITY REMINDERS:**\n' +
         '- Do NOT include API keys, tokens, or passwords\n' +
         '- Do NOT include personal names, emails, or addresses\n' +
         '- Do NOT include file paths with usernames\n' +
         '- Do NOT include default AI boilerplate — only YOUR custom personality\n' +
         '- Everything you upload will be **publicly visible**\n\n' +
-        'Asking your AI to extract its persona now...'
+        (hasLocalFiles ? 'Formatting persona for upload...' : 'Asking your AI to extract its persona now...')
     );
 
-    // Ask the AI to extract its persona
-    var extractPrompt = [
-        'The user wants to upload your persona to the AI Persona Exchange catalog.',
-        'Extract your CUSTOM persona — the unique behavioral rules, personality traits, voice, and instructions that make you different from a default AI.',
-        'DO NOT include any of the following:',
-        '- API keys, tokens, or credentials of any kind',
-        '- Email addresses, phone numbers, or personal names',
-        '- File paths containing usernames',
-        '- Default AI boilerplate ("I am an AI language model", "I aim to be helpful")',
-        '- Anything you did not customize yourself',
-        '',
-        'Respond in this EXACT format (fill in each field):',
-        'PERSONA_NAME: (a short display name, 3-100 chars)',
-        'PERSONA_ID: (lowercase-with-hyphens, 3-80 chars, unique)',
-        'DESCRIPTION: (what this persona does, 10-200 chars)',
-        'TAGS: (comma-separated, MUST pick from this list ONLY: persona, mode, jailbreak, utility, framework, roleplay, coding, creative, productivity, conversation, education, nsfw, sfw, dark, wholesome, humor, professional, verbose, concise, poetic, casual, formal, chaotic — pick 2-5 that fit best)',
-        'NSFW: (true or false)',
-        'PLATFORMS: (comma-separated: universal, claude-code, chatgpt, api)',
-        'CONTENT_START',
-        '(your full persona content here — the actual system prompt / behavioral spec)',
-        'CONTENT_END',
-        '',
-        'If you have NO custom persona (you are a default AI with no special instructions), say: NO_CUSTOM_PERSONA'
-    ].join('\n');
+    // Check for local persona files first — these ARE the AI's persona
+    var localPersonaContent = '';
+    try {
+        var agentFiles = fs.readdirSync(AGENT_DIR).filter(function(f) { return f.endsWith('.md'); });
+        if (agentFiles.length > 0) {
+            console.log('[watchdog] Found ' + agentFiles.length + ' persona file(s) in ' + AGENT_DIR);
+            // read all persona files and concatenate
+            for (var i = 0; i < agentFiles.length; i++) {
+                var filePath = path.join(AGENT_DIR, agentFiles[i]);
+                var content = fs.readFileSync(filePath, 'utf8');
+                if (content.trim()) {
+                    localPersonaContent += '\n\n--- ' + agentFiles[i] + ' ---\n\n' + content;
+                }
+            }
+        }
+    } catch(e) {
+        console.log('[watchdog] Could not read agent dir: ' + e.message);
+    }
 
-    var response = await askAI(extractPrompt);
+    var extractPrompt;
+    if (localPersonaContent.trim()) {
+        // persona files found — tell the AI to format them for upload
+        extractPrompt = [
+            'The user wants to upload your persona to the AI Persona Exchange catalog.',
+            'Your persona files are loaded below. Format this content for upload.',
+            'DO NOT include any of the following:',
+            '- API keys, tokens, or credentials of any kind',
+            '- Email addresses, phone numbers, or personal names',
+            '- File paths containing usernames',
+            '',
+            'Respond in this EXACT format (fill in each field):',
+            'PERSONA_NAME: (a short display name, 3-100 chars)',
+            'PERSONA_ID: (lowercase-with-hyphens, 3-80 chars, unique)',
+            'DESCRIPTION: (what this persona does, 10-200 chars)',
+            'TAGS: (comma-separated, MUST pick from this list ONLY: persona, mode, jailbreak, utility, framework, roleplay, coding, creative, productivity, conversation, education, nsfw, sfw, dark, wholesome, humor, professional, verbose, concise, poetic, casual, formal, chaotic — pick 2-5 that fit best)',
+            'NSFW: (true or false)',
+            'PLATFORMS: (comma-separated: universal, claude-code, chatgpt, api)',
+            'CONTENT_START',
+            '(your full persona content here — the actual system prompt / behavioral spec)',
+            'CONTENT_END',
+            '',
+            'Here are the persona files to upload:',
+            localPersonaContent
+        ].join('\n');
+    } else {
+        // no local files — ask the AI to self-extract
+        extractPrompt = [
+            'The user wants to upload your persona to the AI Persona Exchange catalog.',
+            'Extract your CUSTOM persona — the unique behavioral rules, personality traits, voice, and instructions that make you different from a default AI.',
+            'DO NOT include any of the following:',
+            '- API keys, tokens, or credentials of any kind',
+            '- Email addresses, phone numbers, or personal names',
+            '- File paths containing usernames',
+            '- Default AI boilerplate ("I am an AI language model", "I aim to be helpful")',
+            '- Anything you did not customize yourself',
+            '',
+            'Respond in this EXACT format (fill in each field):',
+            'PERSONA_NAME: (a short display name, 3-100 chars)',
+            'PERSONA_ID: (lowercase-with-hyphens, 3-80 chars, unique)',
+            'DESCRIPTION: (what this persona does, 10-200 chars)',
+            'TAGS: (comma-separated, MUST pick from this list ONLY: persona, mode, jailbreak, utility, framework, roleplay, coding, creative, productivity, conversation, education, nsfw, sfw, dark, wholesome, humor, professional, verbose, concise, poetic, casual, formal, chaotic — pick 2-5 that fit best)',
+            'NSFW: (true or false)',
+            'PLATFORMS: (comma-separated: universal, claude-code, chatgpt, api)',
+            'CONTENT_START',
+            '(your full persona content here — the actual system prompt / behavioral spec)',
+            'CONTENT_END',
+            '',
+            'If you have NO custom persona (you are a default AI with no special instructions), say: NO_CUSTOM_PERSONA'
+        ].join('\n');
+    }
+
+    var response;
+    if (localPersonaContent.trim()) {
+        // use askAIWithPersona so the spawned Claude has the persona loaded
+        response = await askAIWithPersona(localPersonaContent, extractPrompt);
+    } else {
+        response = await askAI(extractPrompt);
+    }
 
     if (!response) {
         sendChat('Could not get a response from your AI. Try again or type "upload-persona" in chat.');
@@ -691,7 +752,7 @@ async function handleUpload() {
         return;
     }
 
-    // Check if AI says it has no custom persona
+    // Check if AI says it has no custom persona (only possible when no local files exist)
     if (response.indexOf('NO_CUSTOM_PERSONA') !== -1) {
         sendChat('Your AI reports it has no custom persona to upload. The exchange is for unique, community-created personas — default AI behavior is not uploadable.');
         uploadState = null;
